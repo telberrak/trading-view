@@ -191,7 +191,7 @@ dialog input:focus, dialog select:focus { outline: none; border-color: var(--acc
 .tbtn.active { color: var(--accent); }
 
 /* drawings overlay */
-#draw-layer { position: absolute; top: 0; left: 0; right: 0; z-index: 2; pointer-events: none; overflow: hidden; }
+#draw-layer { position: absolute; top: 0; left: 0; width: 100%; z-index: 2; pointer-events: none; overflow: hidden; }
 #draw-layer .hit { stroke: transparent; stroke-width: 12; fill: none; pointer-events: stroke; cursor: move; }
 #draw-layer .hit-text { pointer-events: all; cursor: move; }
 #draw-layer .handle { fill: #000; stroke: #2962ff; stroke-width: 2; pointer-events: all; cursor: pointer; }

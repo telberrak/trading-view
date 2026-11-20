@@ -57,7 +57,16 @@ export function initDrawings({ chart, candles, getBars, wrap }: Ctx) {
     const i = Math.floor(l);
     return bars[i].time + (l - i) * (bars[i + 1].time - bars[i].time);
   }
-  const x = (t: number) => { const l = logicalFromTime(t); return l == null ? null : ts().logicalToCoordinate(l as Logical); };
+  // The chart maps fractional logical indexes past the last bar to 0, so interpolate between whole ones ourselves.
+  const xAt = (l: number) => {
+    const a = Math.floor(l);
+    const ca = ts().logicalToCoordinate(a as Logical);
+    if (ca == null) return null;
+    if (l === a) return ca;
+    const cb = ts().logicalToCoordinate((a + 1) as Logical);
+    return cb == null ? ca : ca + (l - a) * (cb - ca);
+  };
+  const x = (t: number) => { const l = logicalFromTime(t); return l == null ? null : xAt(l); };
   const y = (p: number) => candles.priceToCoordinate(p);
   function ptFromXY(px: number, py: number): Pt | null {
     const bars = getBars();
