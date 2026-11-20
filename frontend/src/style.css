@@ -287,3 +287,26 @@ dialog input[type=color]::-webkit-color-swatch-wrapper { padding: 2px; }
 dialog input[type=color]::-webkit-color-swatch { border: 0; border-radius: 2px; }
 .sd-colors { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; margin-bottom: 12px; }
 .dlg-btns .spacer { flex: 1; }
+
+/* drawing tool groups */
+#tool-groups { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+#tools button.tg { position: relative; }
+.tg-more { position: absolute; right: 0; bottom: 0; width: 10px; height: 10px; cursor: pointer; }
+.tg-more::after { content: ""; position: absolute; right: 2px; bottom: 2px; border: 3px solid transparent; border-right-color: #8a8a8a; border-bottom-color: #8a8a8a; }
+#tools button.tg:hover .tg-more::after { border-right-color: #fff; border-bottom-color: #fff; }
+#tool-flyout { position: fixed; z-index: 40; min-width: 260px; background: #1e1e1e; border: 1px solid var(--border); border-radius: 6px; padding: 4px 0; box-shadow: 0 8px 24px rgba(0,0,0,.6); }
+#tool-flyout[hidden] { display: none; }
+#tool-flyout .tf-title { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; padding: 6px 12px 4px; }
+#tool-flyout button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 12px; text-align: left; color: var(--text); }
+#tool-flyout button:hover { background: #2a2a2a; }
+#tool-flyout button.on { color: var(--accent); }
+#tool-flyout .tf-key { margin-left: auto; color: var(--muted); font-size: 11px; }
+#draw-layer .hit-fill { pointer-events: all; cursor: move; }
+#draw-edit { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 6; display: flex; align-items: center; gap: 4px; padding: 4px 6px;
+  background: #1e1e1e; border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 6px 18px rgba(0,0,0,.5); }
+#draw-edit[hidden] { display: none; }
+#draw-edit input[type=color] { width: 28px; height: 24px; padding: 0; border: 1px solid var(--border); border-radius: 4px; background: none; cursor: pointer; }
+#draw-edit select { background: #111; color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 3px; font: inherit; font-size: 12px; }
+#draw-edit button { padding: 3px 7px; border-radius: 4px; color: var(--text); display: inline-flex; align-items: center; }
+#draw-edit button:hover { background: var(--hover); }
+#draw-edit button[hidden] { display: none; }

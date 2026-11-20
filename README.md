@@ -31,11 +31,19 @@ Force one with `set IB_PORT=7497` before `start.bat` (Windows) or `IB_PORT=7497 
 
 ## Drawings
 
-- Tools: trend line, ray, horizontal line, vertical line, parallel channel (3 clicks: two points, then the width), Fib retracement, rectangle, text, and the measure ruler (price change, %, bars and time).
-- Click a drawing to select it, drag it or its handles to move, Delete/Backspace removes it, Esc cancels.
-- Magnet snaps points to the nearest open/high/low/close. Lock stops drawings being selected or moved. The eye hides them; the bin removes all on this symbol.
-- Undo/redo: the arrows in the top bar, Cmd/Ctrl+Z and Shift+Cmd/Ctrl+Z (or Ctrl+Y).
-- Drawings are saved in the browser per symbol and stay put across timeframes.
+The left toolbar groups the tools like TradingView. Click a group to use the tool shown; click the small corner arrow (or right-click) to pick another one in that group.
+
+- Lines: trend line, ray, extended line, info line, arrow, horizontal line, horizontal ray, vertical line, cross line, parallel channel.
+- Fib, pitchfork and Gann: Fib retracement, trend-based Fib extension, Fib channel, Fib time zones, Fib speed fan, pitchfork, Gann fan, Gann box.
+- Patterns: XABCD, ABCD, triangle, head and shoulders, Elliott impulse (12345) and correction (ABC) waves.
+- Forecasting and measurement: long and short position (click entry, target, stop), date and price range, date range, price range, temporary measure.
+- Shapes and brushes: rectangle, ellipse, circle, triangle, brush and highlighter (press and drag).
+- Text and annotations: text, callout, note, price label, arrow marks up/down, flag.
+- Shortcuts: Alt+T trend, Alt+H horizontal line, Alt+J horizontal ray, Alt+V vertical line, Alt+C cross line, Alt+F Fib, Alt+R rectangle. Esc cancels.
+- Click a drawing to select it: a small bar appears to change its colour and width, edit its text (or double-click it), clone or delete it. Drag it or its handles to move. Delete/Backspace removes it.
+- Magnet snaps to open/high/low/close. The pin keeps the tool active after each drawing. Lock, hide and remove-all are below.
+- Drawings can be placed in the empty space right of the last bar. Undo/redo: arrows in the top bar, Cmd/Ctrl+Z and Shift+Cmd/Ctrl+Z.
+- Saved in the browser per symbol and kept across timeframes.
 
 ## Trading (live orders)
 
