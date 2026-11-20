@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Charts</title>
+  </head>
+  <body>
+    <header id="toolbar">
+      <div class="search">
+        <input id="symbol" autocomplete="off" spellcheck="false" placeholder="Symbol" />
+        <ul id="results" hidden></ul>
+      </div>
+      <div class="sep"></div>
+      <div id="timeframes" class="group"></div>
+      <div class="sep"></div>
+      <div id="indicators" class="group"></div>
+      <div class="spacer"></div>
+      <span id="conn" class="conn" title="IBKR connection">●</span>
+    </header>
+    <main>
+      <section id="chart-wrap">
+        <div id="legend"></div>
+        <div id="chart"></div>
+        <div id="notice" hidden></div>
+      </section>
+      <aside id="watchlist">
+        <div class="wl-head">Watchlist</div>
+        <div class="wl-empty">Watchlist with live prices and IBKR sync arrives in Phase 2.</div>
+      </aside>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
