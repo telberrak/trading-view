@@ -19,7 +19,7 @@
         <button id="ind-btn" class="tbtn"><span class="ico" data-icon="indicators"></span>Indicators</button>
         <div id="ind-menu" class="menu" hidden></div>
       </div>
-      <button class="tbtn" disabled title="Alerts are on the roadmap"><span class="ico" data-icon="alert"></span>Alert</button>
+      <button id="alert-btn" class="tbtn" title="Create alert (Alt+A)"><span class="ico" data-icon="alert"></span>Alert</button>
       <button class="tbtn" disabled title="Bar replay is on the roadmap"><span class="ico" data-icon="replay"></span>Replay</button>
       <div class="spacer"></div>
       <span id="conn" class="conn" title="IBKR connection"></span>
@@ -73,12 +73,31 @@
           <div id="wl-rows"></div>
         </section>
         <section id="details"></section>
+        <section id="alerts" class="hidden">
+          <div class="wl-head"><b>Alerts</b><div class="spacer"></div>
+            <button id="al-new" class="ibtn" title="Create alert"><span class="ico" data-icon="plus"></span></button></div>
+          <div id="alert-rows"></div>
+        </section>
       </aside>
       <nav id="rail">
         <button id="rail-wl" class="active" title="Watchlist"><span class="ico" data-icon="list"></span></button>
         <button id="rail-det" class="active" title="Symbol details"><span class="ico" data-icon="info"></span></button>
+        <button id="rail-al" title="Alerts"><span class="ico" data-icon="alert"></span></button>
       </nav>
     </div>
+    <div id="toasts"></div>
+    <dialog id="alert-dlg">
+      <form id="al-form">
+        <h3>Create alert on <span id="al-sym"></span></h3>
+        <label>Condition
+          <select id="al-cond"><option value="crossing">Crossing</option><option value="above">Greater than</option><option value="below">Less than</option></select>
+        </label>
+        <label>Price <input id="al-price" type="number" step="any" required /></label>
+        <label>Message <input id="al-msg" type="text" placeholder="Optional" maxlength="200" /></label>
+        <div id="al-err" class="err"></div>
+        <div class="dlg-btns"><button type="button" id="al-cancel">Cancel</button><button type="submit" class="primary">Create</button></div>
+      </form>
+    </dialog>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

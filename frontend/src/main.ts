@@ -10,6 +10,7 @@ import {
   type MouseEventParams,
   type UTCTimestamp,
 } from 'lightweight-charts';
+import { initAlerts } from './alerts';
 import { initDrawings } from './drawings';
 import { avatar, icon } from './icons';
 import { ema, vwap, type Bar, type Point } from './indicators';
@@ -309,23 +310,25 @@ el('full-btn').onclick = () => {
 };
 
 // ---------- right rail toggles ----------
-function railToggle(btnId: string, panelId: string, store: string) {
+function railToggle(btnId: string, panelId: string, store: string, dflt = true) {
   const btn = el(btnId), panel = el(panelId);
   const apply = (on: boolean) => {
     btn.classList.toggle('active', on);
     panel.classList.toggle('hidden', !on);
-    const anyOn = !el('watchlist').classList.contains('hidden') || !el('details').classList.contains('hidden');
+    const anyOn = ['watchlist', 'details', 'alerts'].some((id) => !el(id).classList.contains('hidden'));
     el('side').classList.toggle('hidden', !anyOn);
   };
-  let on = load(store, true);
+  let on = load(store, dflt);
   apply(on);
   btn.onclick = () => { on = !on; save(store, on); apply(on); };
 }
 railToggle('rail-wl', 'watchlist', 'showWatchlist');
 railToggle('rail-det', 'details', 'showDetails');
+railToggle('rail-al', 'alerts', 'showAlerts', false);
 
 // ---------- symbol search + watchlist ----------
-function choose(k: string) { key = k; details = null; subscribe(); watchlist.setActive(key); }
+function choose(k: string) { key = k; details = null; subscribe(); watchlist.setActive(key); alerts.refreshLines(); }
+const alerts = initAlerts({ getKey: () => key, getLast: () => bars[bars.length - 1]?.close ?? null, candles, onPick: (k) => choose(k) });
 attachSearch(el<HTMLInputElement>('symbol'), el<HTMLUListElement>('results'), choose);
 const watchlist = initWatchlist(choose, (d) => { if (d.key === key) { details = d; renderLegend(); } });
 watchlist.setActive(key);

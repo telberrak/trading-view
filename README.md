@@ -28,6 +28,14 @@ Force one with `set IB_PORT=7497` before `start.bat` (Windows) or `IB_PORT=7497 
 - Left toolbar: crosshair, trend line (click two points), horizontal line (click a price), hide and clear drawings. Drawings are saved in the browser per symbol.
 - Top right: save chart image, full screen. Right rail: show/hide the watchlist and the symbol details panel.
 
+## Alerts
+
+- Alert button (or Alt+A) on the current symbol: Crossing, Greater than or Less than a price, with an optional message.
+- Alerts run in the local server, so they keep watching while the browser is closed (as long as `start.sh` is running).
+- When one fires: a toast in the app, a sound, a browser notification if the tab is in the background, and a macOS notification.
+- Bell icon on the right rail lists alerts; restart a triggered one with ↻. Active alerts show as dashed orange lines on the chart.
+- Saved in `backend/data/alerts.json`.
+
 ## Watchlist
 
 - Lists on the right with live last price, change and % change (vs. previous close). Starter lists: Stocks, Futures, Crypto.

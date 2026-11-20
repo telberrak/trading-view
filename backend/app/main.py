@@ -15,6 +15,7 @@ from ib_async import IB
 from . import contracts, watchlists
 from .details import details as symbol_details
 from .quotes import QuoteSession
+from .alerts import AlertEngine
 from .streams import TIMEFRAMES, ChartStream
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -29,6 +30,15 @@ INFO_CODES = {2104, 2106, 2107, 2108, 2119, 2158, 2100, 2150}
 ib = IB()
 state = {"port": None, "error": None}
 listeners: set[asyncio.Queue] = set()
+event_queues: set[asyncio.Queue] = set()
+
+
+def broadcast(msg: dict):
+    for q in list(event_queues):
+        q.put_nowait(msg)
+
+
+alerts = AlertEngine(ib, broadcast)
 
 
 def _on_error(req_id, code, msg, *_):
@@ -64,9 +74,10 @@ async def keep_connected():
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     ib.errorEvent += _on_error
-    task = asyncio.create_task(keep_connected())
+    tasks = [asyncio.create_task(keep_connected()), asyncio.create_task(alerts.run())]
     yield
-    task.cancel()
+    for t in tasks:
+        t.cancel()
     ib.disconnect()
 
 
@@ -138,6 +149,54 @@ async def get_details(key: str):
         return await symbol_details(ib, key.upper())
     except Exception as e:  # noqa: BLE001
         return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@app.get("/api/alerts")
+async def list_alerts():
+    return alerts.list()
+
+
+@app.post("/api/alerts")
+async def create_alert(body: dict = Body(...)):
+    try:
+        a = alerts.create(body)
+    except (KeyError, ValueError) as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    broadcast({"type": "alerts", "alerts": alerts.list()})
+    return a
+
+
+@app.patch("/api/alerts/{alert_id}")
+async def update_alert(alert_id: str, body: dict = Body(...)):
+    try:
+        a = alerts.update(alert_id, body)
+    except StopIteration:
+        return JSONResponse({"error": "not found"}, status_code=404)
+    broadcast({"type": "alerts", "alerts": alerts.list()})
+    return a
+
+
+@app.delete("/api/alerts/{alert_id}")
+async def delete_alert(alert_id: str):
+    alerts.delete(alert_id)
+    broadcast({"type": "alerts", "alerts": alerts.list()})
+    return {"ok": True}
+
+
+@app.websocket("/ws/events")
+async def events_ws(ws: WebSocket):
+    """Server-to-browser events: alert fired, alert list changed."""
+    await ws.accept()
+    q: asyncio.Queue = asyncio.Queue()
+    event_queues.add(q)
+    try:
+        await ws.send_json({"type": "alerts", "alerts": alerts.list()})
+        while True:
+            await ws.send_json(await q.get())
+    except Exception:  # noqa: BLE001 - socket closed
+        pass
+    finally:
+        event_queues.discard(q)
 
 
 @app.get("/api/watchlists")
