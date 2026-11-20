@@ -41,7 +41,7 @@ def bar_dict(b) -> dict:
         "high": float(b.high),
         "low": float(b.low),
         "close": float(b.close),
-        "volume": float(b.volume or 0),
+        "volume": max(float(b.volume or 0), 0.0) if b.volume == b.volume else 0.0,
     }
 
 

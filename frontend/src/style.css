@@ -191,9 +191,15 @@ dialog input:focus, dialog select:focus { outline: none; border-color: var(--acc
 .tbtn.active { color: var(--accent); }
 
 /* drawings overlay */
-#draw-layer { position: absolute; inset: 0; z-index: 2; pointer-events: none; overflow: visible; }
+#draw-layer { position: absolute; top: 0; left: 0; right: 0; z-index: 2; pointer-events: none; overflow: hidden; }
 #draw-layer .hit { stroke: transparent; stroke-width: 12; fill: none; pointer-events: stroke; cursor: move; }
 #draw-layer .hit-text { pointer-events: all; cursor: move; }
 #draw-layer .handle { fill: #000; stroke: #2962ff; stroke-width: 2; pointer-events: all; cursor: pointer; }
 #draw-layer g.sel line, #draw-layer g.sel path { stroke-width: 2.5; }
 #tools button.active[id^="draw-"] { color: var(--accent); }
+/* oscillator panes */
+.pane-legend { position: absolute; left: 8px; z-index: 3; pointer-events: none; font-size: 12px; font-variant-numeric: tabular-nums; }
+.pane-legend .name { color: var(--text); margin-right: 4px; }
+.menu .mini { color: var(--muted); font-size: 11px; padding: 0 2px; }
+.menu .mini:hover { color: var(--text); }
+#ind-menu { max-height: 70vh; overflow-y: auto; min-width: 260px; }

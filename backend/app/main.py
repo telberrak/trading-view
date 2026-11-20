@@ -44,6 +44,10 @@ alerts = AlertEngine(ib, broadcast)
 def _on_error(req_id, code, msg, *_):
     if code in INFO_CODES:
         return
+    if code == 162 and "cancelled" in str(msg).lower():
+        return  # we cancelled it ourselves (symbol/timeframe switch); not an error
+    if code == 366:
+        return  # "No historical data query found": a cancel racing a finished request
     log.warning("IB error %s (req %s): %s", code, req_id, msg)
     for q in list(listeners):
         q.put_nowait({"type": "notice", "code": code, "message": msg})

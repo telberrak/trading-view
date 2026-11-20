@@ -162,6 +162,7 @@ export function initDrawings({ chart, candles, getBars, wrap }: Ctx) {
     }
   }
   function render() {
+    svg.style.height = `${chart.paneSize().height}px`;
     svg.textContent = '';
     if (hidden && !ruler) return;
     if (!hidden) {

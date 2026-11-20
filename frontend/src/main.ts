@@ -3,17 +3,16 @@ import {
   ColorType,
   CrosshairMode,
   HistogramSeries,
-  LineSeries,
   LineStyle,
   createChart,
-  type ISeriesApi,
   type MouseEventParams,
   type UTCTimestamp,
 } from 'lightweight-charts';
 import { initAlerts } from './alerts';
 import { initDrawings } from './drawings';
 import { avatar, icon } from './icons';
-import { ema, vwap, type Bar, type Point } from './indicators';
+import { type Bar } from './indicators';
+import { initStudies } from './studies';
 import { attachSearch, shortName } from './search';
 import { initWatchlist, type Details } from './watchlist';
 import './style.css';
@@ -29,7 +28,6 @@ const RANGES: [string, TF, number][] = [
   ['YTD', '1D', -1], ['1Y', '1D', 365], ['5Y', '1W', 1826], ['All', '1M', 0],
 ];
 
-interface IndicatorCfg { id: string; kind: 'ema' | 'vwap'; period?: number; color: string; on: boolean }
 
 // ---------- persisted settings ----------
 function load<T>(k: string, d: T): T {
@@ -42,11 +40,7 @@ document.querySelectorAll<HTMLElement>('[data-icon]').forEach((n) => (n.innerHTM
 let key: string = load('key', 'STK:AAPL:SMART:USD');
 let tf: TF = load('tf', '1D');
 if (!TIMEFRAMES.includes(tf)) tf = '1D';
-const indicators: IndicatorCfg[] = load('indicators', [
-  { id: 'ema1', kind: 'ema', period: 9, color: '#2962ff', on: true },
-  { id: 'ema2', kind: 'ema', period: 21, color: '#ff9800', on: true },
-  { id: 'vwap', kind: 'vwap', color: '#e040fb', on: true },
-]);
+
 
 // ---------- chart ----------
 const css = getComputedStyle(document.documentElement);
@@ -71,8 +65,6 @@ chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.78, bottom: 0 } })
 candles.priceScale().applyOptions({ scaleMargins: { top: 0.08, bottom: 0.24 } });
 const drawings = initDrawings({ chart, candles, getBars: () => bars, wrap: el('chart-wrap') });
 
-const lines = new Map<string, ISeriesApi<'Line'>>();
-const lineData = new Map<string, Point[]>();
 let bars: Bar[] = []; // what the chart shows (a prefix of allBars during replay)
 let allBars: Bar[] = [];
 let replayIdx: number | null = null; // index of the last visible bar while replaying
@@ -86,22 +78,9 @@ const shift = (t: number) => (INTRADAY.has(tf) ? t - new Date(t * 1000).getTimez
 const volBar = (b: Bar) => ({ time: b.time as UTCTimestamp, value: b.volume,
   color: b.close >= b.open ? 'rgba(38,120,110,.75)' : 'rgba(140,48,44,.75)' });
 
-function computeIndicators() {
-  for (const cfg of indicators) {
-    let s = lines.get(cfg.id);
-    const show = cfg.on && (cfg.kind !== 'vwap' || INTRADAY.has(tf));
-    if (!show) { if (s) { chart.removeSeries(s); lines.delete(cfg.id); } lineData.delete(cfg.id); continue; }
-    if (!s) {
-      s = chart.addSeries(LineSeries, { color: cfg.color, lineWidth: 1, priceLineVisible: false,
-        lastValueVisible: true, crosshairMarkerVisible: false });
-      lines.set(cfg.id, s);
-    }
-    s.applyOptions({ color: cfg.color });
-    const pts = cfg.kind === 'ema' ? ema(bars, cfg.period!) : vwap(bars);
-    lineData.set(cfg.id, pts);
-    s.setData(pts.map((p) => ({ time: p.time as UTCTimestamp, value: p.value })));
-  }
-}
+const studies = initStudies({ chart, getBars: () => bars, isIntraday: () => INTRADAY.has(tf), wrap: el('chart-wrap'),
+  onChange: () => renderLegend() });
+function computeIndicators() { studies.compute(); }
 
 function applyRange(days: number) {
   if (!bars.length) return;
@@ -160,11 +139,8 @@ function renderLegend(param?: MouseEventParams) {
   const prev = i > 0 ? bars[i - 1].close : b.open;
   const chg = b.close - prev;
   const cls = chg >= 0 ? 'up' : 'down';
-  const inds = indicators.filter((c) => lineData.has(c.id)).map((c) => {
-    const p = lineData.get(c.id)!.find((x) => x.time === b.time);
-    const n = c.kind === 'ema' ? `EMA ${c.period}` : 'VWAP';
-    return `<span style="color:${c.color}">${n} ${p ? fmt(p.value) : '–'}</span>`;
-  }).join('');
+  const inds = studies.overlayLegend(b.time);
+  studies.paneLegends(b.time);
   lg.innerHTML = `<div class="row">${head}
     <span class="ohlc ${cls}"><b>O</b>${fmt(b.open)}<b>H</b>${fmt(b.high)}<b>L</b>${fmt(b.low)}<b>C</b>${fmt(b.close)}
     &nbsp;${chg >= 0 ? '+' : ''}${fmt(chg)} (${chg >= 0 ? '+' : ''}${((chg / prev) * 100).toFixed(2)}%)</span></div>
@@ -261,47 +237,7 @@ tick();
 
 // ---------- indicators menu ----------
 const indMenu = el('ind-menu');
-function renderIndMenu() {
-  indMenu.innerHTML = '<div class="hint">Click to show or hide</div>';
-  indicators.forEach((cfg, i) => {
-    const b = document.createElement('button');
-    const name = cfg.kind === 'ema' ? `EMA ${cfg.period}` : 'VWAP (intraday)';
-    b.innerHTML = `<span class="swatch" style="background:${cfg.color};opacity:${cfg.on ? 1 : 0.25}"></span><span></span><span class="spacer"></span>`;
-    (b.children[1] as HTMLElement).textContent = name;
-    b.onclick = (e) => { e.stopPropagation(); cfg.on = !cfg.on; changedInds(); };
-    if (cfg.kind === 'ema') {
-      const edit = document.createElement('span');
-      edit.textContent = 'edit';
-      edit.style.color = 'var(--muted)';
-      edit.onclick = (e) => {
-        e.stopPropagation();
-        const p = Number(window.prompt('EMA period', String(cfg.period)));
-        if (p > 0) { cfg.period = Math.round(p); cfg.on = true; changedInds(); }
-      };
-      b.appendChild(edit);
-      const del = document.createElement('span');
-      del.textContent = '×';
-      del.style.color = 'var(--muted)';
-      del.onclick = (e) => { e.stopPropagation(); indicators.splice(i, 1); changedInds(); };
-      b.appendChild(del);
-    }
-    indMenu.appendChild(b);
-  });
-  const add = document.createElement('button');
-  add.innerHTML = `${icon('plus', 14)}<span>Add EMA…</span>`;
-  add.onclick = (e) => {
-    e.stopPropagation();
-    const p = Number(window.prompt('EMA period', '50'));
-    if (p > 0) {
-      const palette = ['#26c6da', '#ffeb3b', '#ef5350', '#66bb6a', '#ab47bc', '#ffa726'];
-      indicators.push({ id: `ema${Date.now()}`, kind: 'ema', period: Math.round(p), color: palette[indicators.length % palette.length], on: true });
-      changedInds();
-    }
-  };
-  indMenu.appendChild(add);
-}
-function changedInds() { save('indicators', indicators); renderIndMenu(); computeIndicators(); renderLegend(); }
-renderIndMenu();
+studies.renderMenu(indMenu);
 el('ind-btn').onclick = (e) => { e.stopPropagation(); indMenu.hidden = !indMenu.hidden; };
 document.addEventListener('click', () => { indMenu.hidden = true; });
 indMenu.onclick = (e) => e.stopPropagation();

@@ -24,7 +24,7 @@ Force one with `set IB_PORT=7497` before `start.bat` (Windows) or `IB_PORT=7497 
 - Or type a key directly: `AAPL`, `FUT:ES:CME`, `FUT:NQ:CME`, `FUT:GC:COMEX`, `CRYPTO:BTC:PAXOS`.
 - Timeframes: 1m 5m 15m 30m 1h 2h 4h D W M. Intraday times are shown in your local time.
 - Bottom bar: 1D 5D 1M 3M 6M YTD 1Y 5Y All jump to a range (switching timeframe like TradingView); clock on the right.
-- Indicators menu: toggle EMA 9 / EMA 21 / VWAP, edit EMA periods, add more EMAs. VWAP shows on intraday charts only.
+- Indicators menu: overlays (EMA, SMA, Bollinger Bands, VWAP) and oscillators in their own panes (RSI, MACD, Stochastic, ATR). Click one to show or hide it, "edit" changes its lengths, × removes it; add as many as you like. VWAP is intraday only and resets at each session start.
 - Left toolbar: drawing tools (see Drawings below).
 - Top right: save chart image, full screen. Right rail: show/hide the watchlist and the symbol details panel.
 
