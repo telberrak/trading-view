@@ -1,5 +1,8 @@
 import {
+  AreaSeries,
+  BarSeries,
   CandlestickSeries,
+  LineSeries,
   ColorType,
   CrosshairMode,
   HistogramSeries,
@@ -12,6 +15,7 @@ import { initAlerts } from './alerts';
 import { initDrawings } from './drawings';
 import { avatar, icon } from './icons';
 import { type Bar } from './indicators';
+import type { ISeriesApi } from 'lightweight-charts';
 import { initStudies } from './studies';
 import { attachSearch, shortName } from './search';
 import { initWatchlist, type Details } from './watchlist';
@@ -63,6 +67,57 @@ const volume = chart.addSeries(HistogramSeries, { priceFormat: { type: 'volume' 
   lastValueVisible: false, priceLineVisible: false });
 chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.78, bottom: 0 } });
 candles.priceScale().applyOptions({ scaleMargins: { top: 0.08, bottom: 0.24 } });
+
+// ---------- chart types ----------
+// `candles` always holds the price data (alerts, drawings and autoscale hang off it). For bar, line and
+// area styles it turns transparent and a second series on the same scale does the drawing.
+const CHART_TYPES = { candles: 'Candles', hollow: 'Hollow candles', ha: 'Heikin Ashi', bars: 'Bars', line: 'Line', area: 'Area' } as const;
+type ChartType = keyof typeof CHART_TYPES;
+let chartType: ChartType = load('chartType', 'candles');
+if (!(chartType in CHART_TYPES)) chartType = 'candles';
+let styleSeries: ISeriesApi<'Bar'> | ISeriesApi<'Line'> | ISeriesApi<'Area'> | null = null;
+const CLEAR = 'rgba(0,0,0,0)';
+function applyChartType() {
+  if (styleSeries) { chart.removeSeries(styleSeries); styleSeries = null; }
+  const solid = { upColor: UP, downColor: DOWN, borderVisible: false, wickUpColor: UP, wickDownColor: DOWN, lastValueVisible: true, priceLineVisible: true };
+  if (chartType === 'candles' || chartType === 'ha') candles.applyOptions(solid);
+  else if (chartType === 'hollow') candles.applyOptions({ ...solid, upColor: CLEAR, borderVisible: true, borderUpColor: UP, borderDownColor: DOWN });
+  else {
+    candles.applyOptions({ upColor: CLEAR, downColor: CLEAR, borderVisible: false, wickUpColor: CLEAR, wickDownColor: CLEAR, lastValueVisible: false, priceLineVisible: false });
+    if (chartType === 'bars') styleSeries = chart.addSeries(BarSeries, { upColor: UP, downColor: DOWN, thinBars: false });
+    else if (chartType === 'line') styleSeries = chart.addSeries(LineSeries, { color: '#2962ff', lineWidth: 2 });
+    else styleSeries = chart.addSeries(AreaSeries, { lineColor: '#2962ff', topColor: 'rgba(41,98,255,.35)', bottomColor: 'rgba(41,98,255,0)', lineWidth: 2 });
+  }
+  el('ct-btn').innerHTML = icon(`ct-${chartType}`);
+  el('ct-btn').title = `Chart type: ${CHART_TYPES[chartType]}`;
+  setMain();
+}
+function heikinAshi(src: Bar[]): Bar[] {
+  const out: Bar[] = [];
+  for (const b of src) {
+    const p = out[out.length - 1];
+    const close = (b.open + b.high + b.low + b.close) / 4;
+    const open = p ? (p.open + p.close) / 2 : (b.open + b.close) / 2;
+    out.push({ ...b, open, close, high: Math.max(b.high, open, close), low: Math.min(b.low, open, close) });
+  }
+  return out;
+}
+const asCandle = (b: Bar) => ({ time: b.time as UTCTimestamp, open: b.open, high: b.high, low: b.low, close: b.close });
+const asValue = (b: Bar) => ({ time: b.time as UTCTimestamp, value: b.close });
+/** Push all of `bars` into the price series for the current chart type. */
+function setMain() {
+  candles.setData((chartType === 'ha' ? heikinAshi(bars) : bars).map(asCandle));
+  if (styleSeries && chartType === 'bars') (styleSeries as ISeriesApi<'Bar'>).setData(bars.map(asCandle));
+  else if (styleSeries) (styleSeries as ISeriesApi<'Line'>).setData(bars.map(asValue));
+}
+/** Update just the latest bar. */
+function updateMain(b: Bar) {
+  if (chartType === 'ha') { setMain(); return; }
+  candles.update(asCandle(b));
+  if (styleSeries && chartType === 'bars') (styleSeries as ISeriesApi<'Bar'>).update(asCandle(b));
+  else if (styleSeries) (styleSeries as ISeriesApi<'Line'>).update(asValue(b));
+}
+
 const drawings = initDrawings({ chart, candles, getBars: () => bars, wrap: el('chart-wrap') });
 
 let bars: Bar[] = []; // what the chart shows (a prefix of allBars during replay)
@@ -98,7 +153,7 @@ function applyRange(days: number) {
 function setHistory(raw: Bar[]) {
   allBars = raw.map((b) => ({ ...b, time: shift(b.time) }));
   bars = replayIdx == null ? allBars : allBars.slice(0, replayIdx + 1);
-  candles.setData(bars.map((b) => ({ ...b, time: b.time as UTCTimestamp })));
+  setMain();
   volume.setData(bars.map(volBar));
   computeIndicators();
   if (pendingRange !== null) { applyRange(pendingRange); pendingRange = null; } else chart.timeScale().scrollToRealTime();
@@ -113,7 +168,7 @@ function updateBar(raw: Bar) {
   if (last && b.time === last.time) allBars[allBars.length - 1] = b; else allBars.push(b);
   if (replayIdx != null) return; // live updates wait until replay ends
   bars = allBars;
-  candles.update({ ...b, time: b.time as UTCTimestamp });
+  updateMain(b);
   volume.update(volBar(b));
   computeIndicators();
   renderLegend();
@@ -195,7 +250,7 @@ function subscribe() {
   bars = [];
   allBars = [];
   drawings.clear();
-  candles.setData([]);
+  setMain();
   volume.setData([]);
   computeIndicators();
   renderLegend();
@@ -235,6 +290,19 @@ function tick() {
 setInterval(tick, 1000);
 tick();
 
+// ---------- chart type menu ----------
+const ctMenu = el('ct-menu');
+for (const [k, name] of Object.entries(CHART_TYPES)) {
+  const b = document.createElement('button');
+  b.innerHTML = `${icon(`ct-${k}`, 18)}<span>${name}</span>`;
+  b.dataset.ct = k;
+  b.onclick = (e) => { e.stopPropagation(); chartType = k as ChartType; save('chartType', k); ctMenu.hidden = true; applyChartType(); renderLegend(); };
+  ctMenu.appendChild(b);
+}
+el('ct-btn').onclick = (e) => { e.stopPropagation(); ctMenu.hidden = !ctMenu.hidden; ctMenu.querySelectorAll<HTMLElement>('button').forEach((x) => x.classList.toggle('on', x.dataset.ct === chartType)); };
+document.addEventListener('click', () => { ctMenu.hidden = true; });
+applyChartType();
+
 // ---------- indicators menu ----------
 const indMenu = el('ind-menu');
 studies.renderMenu(indMenu);
@@ -260,7 +328,7 @@ let replayTimer = 0;
 let replaySpeed = 1000;
 function redrawReplay() {
   bars = replayIdx == null ? allBars : allBars.slice(0, replayIdx + 1);
-  candles.setData(bars.map((b) => ({ ...b, time: b.time as UTCTimestamp })));
+  setMain();
   volume.setData(bars.map(volBar));
   computeIndicators();
   renderLegend();
@@ -272,7 +340,7 @@ function replayStep() {
   replayIdx += 1;
   const b = allBars[replayIdx];
   bars = allBars.slice(0, replayIdx + 1);
-  candles.update({ ...b, time: b.time as UTCTimestamp });
+  updateMain(b);
   volume.update(volBar(b));
   computeIndicators();
   renderLegend();

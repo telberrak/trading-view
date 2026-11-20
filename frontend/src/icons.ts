@@ -30,6 +30,12 @@ const P: Record<string, string> = {
   lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/>',
   undo: '<path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 010 12h-3"/>',
   redo: '<path d="M15 14l5-5-5-5"/><path d="M20 9H10a6 6 0 000 12h3"/>',
+  'ct-candles': '<path d="M8 3v3M8 16v5M16 5v4M16 15v4"/><rect x="5.5" y="6" width="5" height="10" fill="currentColor"/><rect x="13.5" y="9" width="5" height="6" fill="currentColor"/>',
+  'ct-hollow': '<path d="M8 3v3M8 16v5M16 5v4M16 15v4"/><rect x="5.5" y="6" width="5" height="10"/><rect x="13.5" y="9" width="5" height="6" fill="currentColor"/>',
+  'ct-ha': '<path d="M8 4v3M8 15v4M16 6v3M16 15v3"/><rect x="5.5" y="7" width="5" height="8"/><rect x="13.5" y="9" width="5" height="6"/><path d="M5.5 11h5"/>',
+  'ct-bars': '<path d="M8 4v16M5 8h3M8 16h3M16 6v12M13 15h3M16 9h3"/>',
+  'ct-line': '<path d="M3 17l5-6 4 3 5-7 4 4"/>',
+  'ct-area': '<path d="M3 17l5-6 4 3 5-7 4 4v8H3z" fill="currentColor" fill-opacity=".25"/><path d="M3 17l5-6 4 3 5-7 4 4"/>',
   calendar: '<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>',
 };
 

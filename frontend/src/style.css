@@ -203,3 +203,5 @@ dialog input:focus, dialog select:focus { outline: none; border-color: var(--acc
 .menu .mini { color: var(--muted); font-size: 11px; padding: 0 2px; }
 .menu .mini:hover { color: var(--text); }
 #ind-menu { max-height: 70vh; overflow-y: auto; min-width: 260px; }
+#ct-menu { min-width: 180px; }
+#ct-menu button.on { color: var(--accent); }
