@@ -23,7 +23,8 @@ def _num(v) -> float | None:
 def snapshot(t: Ticker) -> dict:
     last = _num(t.last) or _num(t.marketPrice()) or _num(t.close)
     prev = _num(t.close)
-    out = {"last": last, "prevClose": prev, "change": None, "changePct": None}
+    vol = _num(t.volume)
+    out = {"last": last, "prevClose": prev, "change": None, "changePct": None, "volume": vol}
     if last is not None and prev is not None:
         out["change"] = last - prev
         out["changePct"] = (last - prev) / prev * 100
@@ -39,7 +40,7 @@ class QuoteSession:
         self.sent: dict[str, dict] = {}
 
     async def set_symbols(self, keys: list[str]):
-        keys = list(dict.fromkeys(keys))[:90]  # stay under IBKR's ~100 market data lines
+        keys = list(dict.fromkeys(k for k in keys if not k.startswith("###")))[:90]  # stay under IBKR's ~100 market data lines
         for k in [k for k in self.tickers if k not in keys]:
             self.ib.cancelMktData(self.tickers.pop(k).contract)
             self.sent.pop(k, None)

@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from ib_async import IB
 
 from . import contracts, watchlists
+from .details import details as symbol_details
 from .quotes import QuoteSession
 from .streams import TIMEFRAMES, ChartStream
 
@@ -127,6 +128,16 @@ async def chart_ws(ws: WebSocket):
             stream.stop()
         listeners.discard(queue)
         send_task.cancel()
+
+
+@app.get("/api/details")
+async def get_details(key: str):
+    if not ib.isConnected():
+        return JSONResponse({"error": "Not connected to IBKR"}, status_code=503)
+    try:
+        return await symbol_details(ib, key.upper())
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"error": str(e)}, status_code=400)
 
 
 @app.get("/api/watchlists")

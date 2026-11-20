@@ -7,40 +7,78 @@
   </head>
   <body>
     <header id="toolbar">
-      <div class="search">
+      <div class="search sym-pill">
+        <span class="ico" data-icon="search"></span>
         <input id="symbol" autocomplete="off" spellcheck="false" placeholder="Symbol" />
         <ul id="results" class="results" hidden></ul>
       </div>
       <div class="sep"></div>
       <div id="timeframes" class="group"></div>
       <div class="sep"></div>
-      <div id="indicators" class="group"></div>
+      <div class="menu-wrap">
+        <button id="ind-btn" class="tbtn"><span class="ico" data-icon="indicators"></span>Indicators</button>
+        <div id="ind-menu" class="menu" hidden></div>
+      </div>
+      <button class="tbtn" disabled title="Alerts are on the roadmap"><span class="ico" data-icon="alert"></span>Alert</button>
+      <button class="tbtn" disabled title="Bar replay is on the roadmap"><span class="ico" data-icon="replay"></span>Replay</button>
       <div class="spacer"></div>
-      <span id="conn" class="conn" title="IBKR connection">●</span>
+      <span id="conn" class="conn" title="IBKR connection"></span>
+      <button id="shot-btn" class="tbtn icon-only" title="Save chart image"><span class="ico" data-icon="camera"></span></button>
+      <button id="full-btn" class="tbtn icon-only" title="Full screen"><span class="ico" data-icon="full"></span></button>
     </header>
-    <main>
-      <section id="chart-wrap">
-        <div id="legend"></div>
-        <div id="chart"></div>
-        <div id="notice" hidden></div>
-      </section>
-      <aside id="watchlist">
-        <div class="wl-head">
-          <select id="wl-select" title="Watchlists"></select>
-          <button id="wl-new" title="New list">+</button>
-          <button id="wl-rename" title="Rename list">Rename</button>
-          <button id="wl-delete" title="Delete list">Delete</button>
-          <button id="wl-import" title="Import a TWS watchlist export (.csv/.txt)">Import</button>
-          <input id="wl-file" type="file" accept=".csv,.txt" hidden />
-        </div>
-        <div class="search wl-search">
-          <input id="wl-add" autocomplete="off" spellcheck="false" placeholder="Add symbol" />
-          <ul id="wl-results" class="results" hidden></ul>
-        </div>
-        <div class="wl-cols"><span>Symbol</span><span class="n">Last</span><span class="n">Chg</span><span class="n">Chg%</span><span></span></div>
-        <div id="wl-rows"></div>
+    <div id="body">
+      <nav id="tools">
+        <button data-tool="cross" class="active" title="Crosshair"><span class="ico" data-icon="cross"></span></button>
+        <button data-tool="trend" title="Trend line (click two points)"><span class="ico" data-icon="trend"></span></button>
+        <button data-tool="hline" title="Horizontal line (click a price)"><span class="ico" data-icon="hline"></span></button>
+        <div class="tsep"></div>
+        <button id="draw-hide" title="Hide drawings"><span class="ico" data-icon="eye"></span></button>
+        <button id="draw-clear" title="Remove drawings on this chart"><span class="ico" data-icon="trash"></span></button>
+      </nav>
+      <main id="center">
+        <section id="chart-wrap">
+          <div id="legend"></div>
+          <div id="chart"></div>
+          <div id="notice" hidden></div>
+        </section>
+        <footer id="rangebar">
+          <div id="ranges" class="group"></div>
+          <div class="spacer"></div>
+          <span id="clock"></span>
+        </footer>
+      </main>
+      <aside id="side">
+        <section id="watchlist">
+          <div class="wl-head">
+            <select id="wl-select" title="Watchlists"></select>
+            <div class="spacer"></div>
+            <button id="wl-plus" class="ibtn" title="Add symbol"><span class="ico" data-icon="plus"></span></button>
+            <div class="menu-wrap">
+              <button id="wl-more" class="ibtn" title="List options"><span class="ico" data-icon="more"></span></button>
+              <div id="wl-menu" class="menu right" hidden>
+                <button data-act="section">Add section</button>
+                <button data-act="new">New list</button>
+                <button data-act="rename">Rename list</button>
+                <button data-act="import">Import TWS watchlist…</button>
+                <button data-act="delete" class="danger">Delete list</button>
+              </div>
+            </div>
+            <input id="wl-file" type="file" accept=".csv,.txt" hidden />
+          </div>
+          <div class="search wl-search" hidden>
+            <input id="wl-add" autocomplete="off" spellcheck="false" placeholder="Add symbol" />
+            <ul id="wl-results" class="results" hidden></ul>
+          </div>
+          <div class="wl-cols"><span>Symbol</span><span class="n">Last</span><span class="n">Chg%</span><span class="n">Vol</span></div>
+          <div id="wl-rows"></div>
+        </section>
+        <section id="details"></section>
       </aside>
-    </main>
+      <nav id="rail">
+        <button id="rail-wl" class="active" title="Watchlist"><span class="ico" data-icon="list"></span></button>
+        <button id="rail-det" class="active" title="Symbol details"><span class="ico" data-icon="info"></span></button>
+      </nav>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

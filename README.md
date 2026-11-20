@@ -22,14 +22,17 @@ Force one with `set IB_PORT=7497` before `start.bat` (Windows) or `IB_PORT=7497 
 
 - Type a symbol anywhere (like TradingView) and pick from the list: stocks, continuous futures (`ES1!`), crypto.
 - Or type a key directly: `AAPL`, `FUT:ES:CME`, `FUT:NQ:CME`, `FUT:GC:COMEX`, `CRYPTO:BTC:PAXOS`.
-- Timeframes: 1m 5m 15m 1h 1D 1W 1M. Intraday times are shown in your local time.
-- Indicators: click EMA 9 / EMA 21 / VWAP to toggle; double-click an EMA to change its period. VWAP shows on intraday charts only.
+- Timeframes: 1m 5m 15m 30m 1h 2h 4h D W M. Intraday times are shown in your local time.
+- Bottom bar: 1D 5D 1M 3M 6M YTD 1Y 5Y All jump to a range (switching timeframe like TradingView); clock on the right.
+- Indicators menu: toggle EMA 9 / EMA 21 / VWAP, edit EMA periods, add more EMAs. VWAP shows on intraday charts only.
+- Left toolbar: crosshair, trend line (click two points), horizontal line (click a price), hide and clear drawings. Drawings are saved in the browser per symbol.
+- Top right: save chart image, full screen. Right rail: show/hide the watchlist and the symbol details panel.
 
 ## Watchlist
 
 - Lists on the right with live last price, change and % change (vs. previous close). Starter lists: Stocks, Futures, Crypto.
 - Click a row to chart it; Up/Down arrow keys step through the list. Drag rows to reorder, hover and click × to remove.
-- "Add symbol" searches IBKR. `+` makes a new list, Rename/Delete manage the current one.
+- `+` searches IBKR and adds a symbol. The `⋯` menu adds a collapsible section, makes/renames/deletes lists and imports.
 - **Import** takes a TWS watchlist export (in TWS: right-click the watchlist tab > Export page content, or any .csv/.txt of tickers) and adds it as a new list.
 - Lists are saved in `backend/data/watchlists.json` (not committed).
 

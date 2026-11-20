@@ -13,7 +13,8 @@ DATA = Path(__file__).resolve().parents[1] / "data" / "watchlists.json"
 DEFAULT = {
     "active": 0,
     "lists": [
-        {"name": "Stocks", "symbols": [f"STK:{s}:SMART:USD" for s in ("SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA")]},
+        {"name": "Stocks", "symbols": ["###INDEX ETFS"] + [f"STK:{s}:SMART:USD" for s in ("SPY", "QQQ")]
+                                       + ["###MAJORS"] + [f"STK:{s}:SMART:USD" for s in ("AAPL", "MSFT", "NVDA", "META", "TSLA")]},
         {"name": "Futures", "symbols": ["FUT:ES:CME:USD", "FUT:NQ:CME:USD", "FUT:CL:NYMEX:USD", "FUT:GC:COMEX:USD"]},
         {"name": "Crypto", "symbols": ["CRYPTO:BTC:PAXOS:USD", "CRYPTO:ETH:PAXOS:USD"]},
     ],

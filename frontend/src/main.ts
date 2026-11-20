@@ -4,19 +4,29 @@ import {
   CrosshairMode,
   HistogramSeries,
   LineSeries,
+  LineStyle,
   createChart,
   type ISeriesApi,
   type MouseEventParams,
   type UTCTimestamp,
 } from 'lightweight-charts';
+import { initDrawings } from './drawings';
+import { avatar, icon } from './icons';
 import { ema, vwap, type Bar, type Point } from './indicators';
 import { attachSearch, shortName } from './search';
-import { initWatchlist } from './watchlist';
+import { initWatchlist, type Details } from './watchlist';
 import './style.css';
 
-const TIMEFRAMES = ['1m', '5m', '15m', '1h', '1D', '1W', '1M'] as const;
+const TIMEFRAMES = ['1m', '5m', '15m', '30m', '1h', '2h', '4h', '1D', '1W', '1M'] as const;
 type TF = (typeof TIMEFRAMES)[number];
-const INTRADAY = new Set<TF>(['1m', '5m', '15m', '1h']);
+const TF_LABEL: Record<TF, string> = { '1m': '1m', '5m': '5m', '15m': '15m', '30m': '30m', '1h': '1h', '2h': '2h', '4h': '4h', '1D': 'D', '1W': 'W', '1M': 'M' };
+const TF_LEGEND: Record<TF, string> = { '1m': '1', '5m': '5', '15m': '15', '30m': '30', '1h': '1h', '2h': '2h', '4h': '4h', '1D': '1D', '1W': '1W', '1M': '1M' };
+const INTRADAY = new Set<TF>(['1m', '5m', '15m', '30m', '1h', '2h', '4h']);
+// Bottom range buttons: timeframe to switch to and how far back to show (days; 0 = everything)
+const RANGES: [string, TF, number][] = [
+  ['1D', '1m', 1], ['5D', '5m', 5], ['1M', '30m', 31], ['3M', '1h', 92], ['6M', '2h', 183],
+  ['YTD', '1D', -1], ['1Y', '1D', 365], ['5Y', '1W', 1826], ['All', '1M', 0],
+];
 
 interface IndicatorCfg { id: string; kind: 'ema' | 'vwap'; period?: number; color: string; on: boolean }
 
@@ -25,9 +35,12 @@ function load<T>(k: string, d: T): T {
   try { const v = localStorage.getItem(k); return v ? (JSON.parse(v) as T) : d; } catch { return d; }
 }
 function save(k: string, v: unknown) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* ignore */ } }
+function el<T extends HTMLElement = HTMLElement>(id: string): T { return document.getElementById(id) as T; }
+document.querySelectorAll<HTMLElement>('[data-icon]').forEach((n) => (n.innerHTML = icon(n.dataset.icon!)));
 
 let key: string = load('key', 'STK:AAPL:SMART:USD');
 let tf: TF = load('tf', '1D');
+if (!TIMEFRAMES.includes(tf)) tf = '1D';
 const indicators: IndicatorCfg[] = load('indicators', [
   { id: 'ema1', kind: 'ema', period: 9, color: '#2962ff', on: true },
   { id: 'ema2', kind: 'ema', period: 21, color: '#ff9800', on: true },
@@ -35,34 +48,40 @@ const indicators: IndicatorCfg[] = load('indicators', [
 ]);
 
 // ---------- chart ----------
+const css = getComputedStyle(document.documentElement);
+const UP = css.getPropertyValue('--candle-up').trim();
+const DOWN = css.getPropertyValue('--candle-down').trim();
 const chart = createChart(el('chart'), {
   autoSize: true,
-  layout: { background: { type: ColorType.Solid, color: '#131722' }, textColor: '#d1d4dc', fontSize: 12,
-    attributionLogo: true },
-  grid: { vertLines: { color: '#1e222d' }, horzLines: { color: '#1e222d' } },
-  crosshair: { mode: CrosshairMode.Normal },
-  rightPriceScale: { borderColor: '#2a2e39' },
-  timeScale: { borderColor: '#2a2e39', rightOffset: 8, timeVisible: true, secondsVisible: false },
+  layout: { background: { type: ColorType.Solid, color: '#000000' }, textColor: '#dbdbdb', fontSize: 12, attributionLogo: false },
+  grid: { vertLines: { color: '#0e0e0e' }, horzLines: { color: '#0e0e0e' } },
+  crosshair: { mode: CrosshairMode.Normal,
+    vertLine: { color: '#6a6a6a', style: LineStyle.Dashed, labelBackgroundColor: '#2a2a2a' },
+    horzLine: { color: '#6a6a6a', style: LineStyle.Dashed, labelBackgroundColor: '#2a2a2a' } },
+  rightPriceScale: { borderColor: '#2a2a2a' },
+  timeScale: { borderColor: '#2a2a2a', rightOffset: 10, timeVisible: true, secondsVisible: false },
 });
 const candles = chart.addSeries(CandlestickSeries, {
-  upColor: '#089981', downColor: '#f23645', borderVisible: false,
-  wickUpColor: '#089981', wickDownColor: '#f23645',
+  upColor: UP, downColor: DOWN, borderVisible: false, wickUpColor: UP, wickDownColor: DOWN,
 });
 const volume = chart.addSeries(HistogramSeries, { priceFormat: { type: 'volume' }, priceScaleId: 'vol',
   lastValueVisible: false, priceLineVisible: false });
-chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
-candles.priceScale().applyOptions({ scaleMargins: { top: 0.1, bottom: 0.25 } });
+chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.78, bottom: 0 } });
+candles.priceScale().applyOptions({ scaleMargins: { top: 0.08, bottom: 0.24 } });
+const drawings = initDrawings(chart, candles, el('chart-wrap'));
 
 const lines = new Map<string, ISeriesApi<'Line'>>();
 const lineData = new Map<string, Point[]>();
 let bars: Bar[] = [];
 let label = '';
 let loading = false;
+let details: Details | null = null;
+let pendingRange: number | null = null;
 
 // IBKR sends UTC; shift intraday bars so the axis shows your local time.
 const shift = (t: number) => (INTRADAY.has(tf) ? t - new Date(t * 1000).getTimezoneOffset() * 60 : t);
 const volBar = (b: Bar) => ({ time: b.time as UTCTimestamp, value: b.volume,
-  color: b.close >= b.open ? 'rgba(8,153,129,.5)' : 'rgba(242,54,69,.5)' });
+  color: b.close >= b.open ? 'rgba(38,120,110,.75)' : 'rgba(140,48,44,.75)' });
 
 function computeIndicators() {
   for (const cfg of indicators) {
@@ -74,10 +93,24 @@ function computeIndicators() {
         lastValueVisible: true, crosshairMarkerVisible: false });
       lines.set(cfg.id, s);
     }
+    s.applyOptions({ color: cfg.color });
     const pts = cfg.kind === 'ema' ? ema(bars, cfg.period!) : vwap(bars);
     lineData.set(cfg.id, pts);
     s.setData(pts.map((p) => ({ time: p.time as UTCTimestamp, value: p.value })));
   }
+}
+
+function applyRange(days: number) {
+  if (!bars.length) return;
+  const ts = chart.timeScale();
+  if (days === 0) { ts.fitContent(); return; }
+  const last = bars[bars.length - 1].time;
+  let from: number;
+  if (days === -1) {
+    const now = new Date();
+    from = Date.UTC(now.getFullYear(), 0, 1) / 1000;
+  } else from = last - days * 86400;
+  ts.setVisibleRange({ from: Math.max(from, bars[0].time) as UTCTimestamp, to: last as UTCTimestamp });
 }
 
 function setHistory(raw: Bar[]) {
@@ -85,7 +118,8 @@ function setHistory(raw: Bar[]) {
   candles.setData(bars.map((b) => ({ ...b, time: b.time as UTCTimestamp })));
   volume.setData(bars.map(volBar));
   computeIndicators();
-  chart.timeScale().scrollToRealTime();
+  if (pendingRange !== null) { applyRange(pendingRange); pendingRange = null; } else chart.timeScale().scrollToRealTime();
+  drawings.show(key, tf);
   renderLegend();
 }
 
@@ -100,35 +134,39 @@ function updateBar(raw: Bar) {
   renderLegend();
 }
 
-// ---------- legend (TradingView-style OHLC readout) ----------
-const fmt = (v: number) => (Math.abs(v) >= 1000 ? v.toFixed(2) : v >= 1 ? v.toFixed(2) : v.toPrecision(4));
+// ---------- legend (header with name, status and OHLC) ----------
+const fmt = (v: number) => (Math.abs(v) >= 1 ? v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : v.toPrecision(4));
 function renderLegend(param?: MouseEventParams) {
+  const lg = el('legend');
   let b = bars[bars.length - 1];
   if (param?.time !== undefined) b = bars.find((x) => x.time === param.time) ?? b;
+  const name = details?.name || label || shortName(key);
+  const exch = details?.exchange ? ` · ${details.exchange}` : '';
+  const status = details?.open == null ? '' : `<span class="status ${details.open ? '' : 'closed'}">${details.open ? 'Open' : 'Closed'}</span>`;
+  const head = `<span class="title">${avatar(shortName(key), 18)}<span class="t"></span></span>${status}`;
   if (!b) {
-    el('legend').innerHTML = `<span class="title"></span><span class="ind">${loading ? 'Loading from IBKR…' : ''}</span>`;
-    el('legend').querySelector('.title')!.textContent = `${label || shortName(key)} · ${tf}`;
+    lg.innerHTML = `<div class="row">${head}<span class="ind">${loading ? 'Loading from IBKR…' : ''}</span></div>`;
+    lg.querySelector('.t')!.textContent = `${name} · ${TF_LEGEND[tf]}${exch}`;
     return;
   }
   const i = bars.indexOf(b);
   const prev = i > 0 ? bars[i - 1].close : b.open;
   const chg = b.close - prev;
-  const col = chg >= 0 ? '#089981' : '#f23645';
+  const cls = chg >= 0 ? 'up' : 'down';
   const inds = indicators.filter((c) => lineData.has(c.id)).map((c) => {
     const p = lineData.get(c.id)!.find((x) => x.time === b.time);
-    const name = c.kind === 'ema' ? `EMA ${c.period}` : 'VWAP';
-    return `<span style="color:${c.color}">${name} ${p ? fmt(p.value) : '–'}</span>`;
-  }).join('&nbsp;&nbsp;');
-  el('legend').innerHTML = `<div><span class="title">${label || key} · ${tf}</span>
-    <span class="ohlc" style="color:${col}"><span>O ${fmt(b.open)}</span><span>H ${fmt(b.high)}</span>
-    <span>L ${fmt(b.low)}</span><span>C ${fmt(b.close)}</span>
-    <span>${chg >= 0 ? '+' : ''}${chg.toFixed(2)} (${((chg / prev) * 100).toFixed(2)}%)</span></span></div>
+    const n = c.kind === 'ema' ? `EMA ${c.period}` : 'VWAP';
+    return `<span style="color:${c.color}">${n} ${p ? fmt(p.value) : '–'}</span>`;
+  }).join('');
+  lg.innerHTML = `<div class="row">${head}
+    <span class="ohlc ${cls}"><b>O</b>${fmt(b.open)}<b>H</b>${fmt(b.high)}<b>L</b>${fmt(b.low)}<b>C</b>${fmt(b.close)}
+    &nbsp;${chg >= 0 ? '+' : ''}${fmt(chg)} (${chg >= 0 ? '+' : ''}${((chg / prev) * 100).toFixed(2)}%)</span></div>
     <div class="ind">${inds}</div>`;
+  lg.querySelector('.t')!.textContent = `${name} · ${TF_LEGEND[tf]}${exch}`;
 }
 chart.subscribeCrosshairMove(renderLegend);
 
-// ---------- notices ----------
-// Notices stay up until the next symbol/timeframe change or a click.
+// ---------- notices (stay until the next symbol/timeframe change or a click) ----------
 function notice(msg: string) {
   const n = el('notice');
   if (n.hidden) n.textContent = '';
@@ -141,7 +179,7 @@ function notice(msg: string) {
 function clearNotice() { const n = el('notice'); n.hidden = true; n.textContent = ''; }
 el('notice').onclick = clearNotice;
 
-// ---------- socket ----------
+// ---------- chart socket ----------
 let ws: WebSocket | null = null;
 function connect() {
   ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
@@ -154,7 +192,7 @@ function connect() {
       loading = false;
       if (!m.bars.length) {
         const crypto = key.startsWith('CRYPTO');
-        notice(`IBKR returned no data for ${shortName(key)} on ${tf}. ` + (crypto
+        notice(`IBKR returned no data for ${shortName(key)} on ${TF_LABEL[tf]}. ` + (crypto
           ? 'Crypto needs crypto trading permission on your IBKR account (Client Portal > Settings > Trading Permissions > Cryptocurrency).'
           : 'Check your IBKR market data subscription for this exchange.'));
       }
@@ -165,63 +203,136 @@ function connect() {
   ws.onclose = () => setTimeout(connect, 2000);
 }
 function subscribe() {
-  clearNotice();
-  loading = true;
   save('key', key);
   save('tf', tf);
+  clearNotice();
+  loading = true;
   label = '';
   bars = [];
+  drawings.clear();
   candles.setData([]);
   volume.setData([]);
   computeIndicators();
   renderLegend();
   el<HTMLInputElement>('symbol').value = shortName(key);
+  document.title = `${shortName(key)} · Charts`;
   if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'subscribe', key, tf }));
 }
-function el<T extends HTMLElement = HTMLElement>(id: string): T { return document.getElementById(id) as T; }
 
-// ---------- timeframe buttons ----------
+// ---------- timeframes ----------
 const tfBox = el('timeframes');
 for (const t of TIMEFRAMES) {
   const b = document.createElement('button');
-  b.textContent = t;
-  b.onclick = () => { tf = t; renderTfs(); subscribe(); };
+  b.textContent = TF_LABEL[t];
+  b.onclick = () => setTf(t);
   tfBox.appendChild(b);
 }
+function setTf(t: TF) { tf = t; renderTfs(); subscribe(); }
 function renderTfs() { [...tfBox.children].forEach((c, i) => c.classList.toggle('active', TIMEFRAMES[i] === tf)); }
 renderTfs();
 
-// ---------- indicator toggles (click = on/off, double-click EMA = change period) ----------
-const indBox = el('indicators');
-function renderInds() {
-  indBox.innerHTML = '';
-  for (const cfg of indicators) {
-    const b = document.createElement('button');
-    b.textContent = cfg.kind === 'ema' ? `EMA ${cfg.period}` : 'VWAP';
-    b.style.color = cfg.on ? cfg.color : '';
-    b.title = cfg.kind === 'ema' ? 'Click to toggle, double-click to change period' : 'Click to toggle (intraday only)';
-    b.onclick = () => { cfg.on = !cfg.on; save('indicators', indicators); renderInds(); computeIndicators(); renderLegend(); };
-    if (cfg.kind === 'ema') {
-      b.ondblclick = () => {
-        const p = Number(window.prompt('EMA period', String(cfg.period)));
-        if (p > 0) { cfg.period = Math.round(p); cfg.on = true; save('indicators', indicators); renderInds(); computeIndicators(); renderLegend(); }
-      };
-    }
-    indBox.appendChild(b);
-  }
+// ---------- bottom range bar + clock ----------
+const rangeBox = el('ranges');
+for (const [name, rtf, days] of RANGES) {
+  const b = document.createElement('button');
+  b.textContent = name;
+  b.onclick = () => {
+    if (tf === rtf && bars.length) applyRange(days);
+    else { pendingRange = days; setTf(rtf); }
+  };
+  rangeBox.appendChild(b);
 }
-renderInds();
+function tick() {
+  const d = new Date();
+  const off = -d.getTimezoneOffset() / 60;
+  el('clock').textContent = `${d.toLocaleTimeString('en-GB')} UTC${off >= 0 ? '+' : ''}${off}`;
+}
+setInterval(tick, 1000);
+tick();
 
-// ---------- symbol search ----------
-const input = el<HTMLInputElement>('symbol');
-function choose(k: string) { key = k; subscribe(); watchlist.setActive(key); }
-attachSearch(input, el<HTMLUListElement>('results'), choose);
-const watchlist = initWatchlist(choose);
+// ---------- indicators menu ----------
+const indMenu = el('ind-menu');
+function renderIndMenu() {
+  indMenu.innerHTML = '<div class="hint">Click to show or hide</div>';
+  indicators.forEach((cfg, i) => {
+    const b = document.createElement('button');
+    const name = cfg.kind === 'ema' ? `EMA ${cfg.period}` : 'VWAP (intraday)';
+    b.innerHTML = `<span class="swatch" style="background:${cfg.color};opacity:${cfg.on ? 1 : 0.25}"></span><span></span><span class="spacer"></span>`;
+    (b.children[1] as HTMLElement).textContent = name;
+    b.onclick = (e) => { e.stopPropagation(); cfg.on = !cfg.on; changedInds(); };
+    if (cfg.kind === 'ema') {
+      const edit = document.createElement('span');
+      edit.textContent = 'edit';
+      edit.style.color = 'var(--muted)';
+      edit.onclick = (e) => {
+        e.stopPropagation();
+        const p = Number(window.prompt('EMA period', String(cfg.period)));
+        if (p > 0) { cfg.period = Math.round(p); cfg.on = true; changedInds(); }
+      };
+      b.appendChild(edit);
+      const del = document.createElement('span');
+      del.textContent = '×';
+      del.style.color = 'var(--muted)';
+      del.onclick = (e) => { e.stopPropagation(); indicators.splice(i, 1); changedInds(); };
+      b.appendChild(del);
+    }
+    indMenu.appendChild(b);
+  });
+  const add = document.createElement('button');
+  add.innerHTML = `${icon('plus', 14)}<span>Add EMA…</span>`;
+  add.onclick = (e) => {
+    e.stopPropagation();
+    const p = Number(window.prompt('EMA period', '50'));
+    if (p > 0) {
+      const palette = ['#26c6da', '#ffeb3b', '#ef5350', '#66bb6a', '#ab47bc', '#ffa726'];
+      indicators.push({ id: `ema${Date.now()}`, kind: 'ema', period: Math.round(p), color: palette[indicators.length % palette.length], on: true });
+      changedInds();
+    }
+  };
+  indMenu.appendChild(add);
+}
+function changedInds() { save('indicators', indicators); renderIndMenu(); computeIndicators(); renderLegend(); }
+renderIndMenu();
+el('ind-btn').onclick = (e) => { e.stopPropagation(); indMenu.hidden = !indMenu.hidden; };
+document.addEventListener('click', () => { indMenu.hidden = true; });
+indMenu.onclick = (e) => e.stopPropagation();
+
+// ---------- toolbar extras ----------
+el('shot-btn').onclick = () => {
+  const a = document.createElement('a');
+  a.href = chart.takeScreenshot().toDataURL('image/png');
+  a.download = `${shortName(key)}-${tf}-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '')}.png`;
+  a.click();
+};
+el('full-btn').onclick = () => {
+  if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen();
+};
+
+// ---------- right rail toggles ----------
+function railToggle(btnId: string, panelId: string, store: string) {
+  const btn = el(btnId), panel = el(panelId);
+  const apply = (on: boolean) => {
+    btn.classList.toggle('active', on);
+    panel.classList.toggle('hidden', !on);
+    const anyOn = !el('watchlist').classList.contains('hidden') || !el('details').classList.contains('hidden');
+    el('side').classList.toggle('hidden', !anyOn);
+  };
+  let on = load(store, true);
+  apply(on);
+  btn.onclick = () => { on = !on; save(store, on); apply(on); };
+}
+railToggle('rail-wl', 'watchlist', 'showWatchlist');
+railToggle('rail-det', 'details', 'showDetails');
+
+// ---------- symbol search + watchlist ----------
+function choose(k: string) { key = k; details = null; subscribe(); watchlist.setActive(key); }
+attachSearch(el<HTMLInputElement>('symbol'), el<HTMLUListElement>('results'), choose);
+const watchlist = initWatchlist(choose, (d) => { if (d.key === key) { details = d; renderLegend(); } });
 watchlist.setActive(key);
 // TradingView habit: start typing anywhere to search
 window.addEventListener('keydown', (e) => {
   if (document.activeElement instanceof HTMLInputElement || e.ctrlKey || e.metaKey || e.altKey) return;
-  if (/^[a-zA-Z]$/.test(e.key)) { input.focus(); input.value = ''; }
+  if (/^[a-zA-Z]$/.test(e.key)) { const i = el<HTMLInputElement>('symbol'); i.focus(); i.value = ''; }
 });
 
 // ---------- connection status ----------
