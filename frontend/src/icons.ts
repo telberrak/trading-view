@@ -19,6 +19,17 @@ const P: Record<string, string> = {
   play: '<path d="M8 5.5v13l10-6.5z" fill="currentColor"/>',
   pause: '<path d="M8 5v14M16 5v14" stroke-width="3"/>',
   step: '<path d="M6 5.5v13l9-6.5zM18 5v14" fill="currentColor"/>',
+  ray: '<path d="M5 19L21 3"/><circle cx="5" cy="19" r="1.6"/><circle cx="11" cy="13" r="1.6"/>',
+  vline: '<path d="M12 3v18"/><circle cx="12" cy="12" r="1.6"/>',
+  rect: '<rect x="4" y="6" width="16" height="12" rx="1"/>',
+  fib: '<path d="M3 5h18M3 10h18M3 14h18M3 19h18" /><path d="M5 19L19 5" stroke-dasharray="2 2"/>',
+  channel: '<path d="M3 15L15 4M9 20L21 9"/>',
+  text: '<path d="M5 6V4h14v2M12 4v16M9 20h6"/>',
+  ruler: '<rect x="2.5" y="8" width="19" height="8" rx="1" transform="rotate(-30 12 12)"/><path d="M8 10.5l1 1.7M11 8.8l1.5 2.5M14 7l1 1.7"/>',
+  magnet: '<path d="M6 4v8a6 6 0 0012 0V4h-4v8a2 2 0 01-4 0V4z"/><path d="M6 8h4M14 8h4"/>',
+  lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/>',
+  undo: '<path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 010 12h-3"/>',
+  redo: '<path d="M15 14l5-5-5-5"/><path d="M20 9H10a6 6 0 000 12h3"/>',
   calendar: '<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>',
 };
 

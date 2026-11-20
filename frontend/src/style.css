@@ -189,3 +189,11 @@ dialog input:focus, dialog select:focus { outline: none; border-color: var(--acc
 #rp-hint { color: #f7a600; padding: 0 6px; font-size: 12px; }
 #rp-hint:empty { display: none; }
 .tbtn.active { color: var(--accent); }
+
+/* drawings overlay */
+#draw-layer { position: absolute; inset: 0; z-index: 2; pointer-events: none; overflow: visible; }
+#draw-layer .hit { stroke: transparent; stroke-width: 12; fill: none; pointer-events: stroke; cursor: move; }
+#draw-layer .hit-text { pointer-events: all; cursor: move; }
+#draw-layer .handle { fill: #000; stroke: #2962ff; stroke-width: 2; pointer-events: all; cursor: pointer; }
+#draw-layer g.sel line, #draw-layer g.sel path { stroke-width: 2.5; }
+#tools button.active[id^="draw-"] { color: var(--accent); }

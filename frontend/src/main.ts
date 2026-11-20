@@ -69,7 +69,7 @@ const volume = chart.addSeries(HistogramSeries, { priceFormat: { type: 'volume' 
   lastValueVisible: false, priceLineVisible: false });
 chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.78, bottom: 0 } });
 candles.priceScale().applyOptions({ scaleMargins: { top: 0.08, bottom: 0.24 } });
-const drawings = initDrawings(chart, candles, el('chart-wrap'));
+const drawings = initDrawings({ chart, candles, getBars: () => bars, wrap: el('chart-wrap') });
 
 const lines = new Map<string, ISeriesApi<'Line'>>();
 const lineData = new Map<string, Point[]>();
@@ -123,7 +123,7 @@ function setHistory(raw: Bar[]) {
   volume.setData(bars.map(volBar));
   computeIndicators();
   if (pendingRange !== null) { applyRange(pendingRange); pendingRange = null; } else chart.timeScale().scrollToRealTime();
-  drawings.show(key, tf);
+  drawings.show(key);
   renderLegend();
 }
 
@@ -138,6 +138,7 @@ function updateBar(raw: Bar) {
   volume.update(volBar(b));
   computeIndicators();
   renderLegend();
+  drawings.refresh();
 }
 
 // ---------- legend (header with name, status and OHLC) ----------
@@ -327,6 +328,7 @@ function redrawReplay() {
   volume.setData(bars.map(volBar));
   computeIndicators();
   renderLegend();
+  drawings.refresh();
 }
 function replayStep() {
   if (replayIdx == null) return;
@@ -338,6 +340,7 @@ function replayStep() {
   volume.update(volBar(b));
   computeIndicators();
   renderLegend();
+  drawings.refresh();
 }
 function pauseReplay() { clearInterval(replayTimer); replayTimer = 0; el('rp-play').innerHTML = icon('play', 18); }
 function playReplay() {

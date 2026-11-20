@@ -25,8 +25,16 @@ Force one with `set IB_PORT=7497` before `start.bat` (Windows) or `IB_PORT=7497 
 - Timeframes: 1m 5m 15m 30m 1h 2h 4h D W M. Intraday times are shown in your local time.
 - Bottom bar: 1D 5D 1M 3M 6M YTD 1Y 5Y All jump to a range (switching timeframe like TradingView); clock on the right.
 - Indicators menu: toggle EMA 9 / EMA 21 / VWAP, edit EMA periods, add more EMAs. VWAP shows on intraday charts only.
-- Left toolbar: crosshair, trend line (click two points), horizontal line (click a price), hide and clear drawings. Drawings are saved in the browser per symbol.
+- Left toolbar: drawing tools (see Drawings below).
 - Top right: save chart image, full screen. Right rail: show/hide the watchlist and the symbol details panel.
+
+## Drawings
+
+- Tools: trend line, ray, horizontal line, vertical line, parallel channel (3 clicks: two points, then the width), Fib retracement, rectangle, text, and the measure ruler (price change, %, bars and time).
+- Click a drawing to select it, drag it or its handles to move, Delete/Backspace removes it, Esc cancels.
+- Magnet snaps points to the nearest open/high/low/close. Lock stops drawings being selected or moved. The eye hides them; the bin removes all on this symbol.
+- Undo/redo: the arrows in the top bar, Cmd/Ctrl+Z and Shift+Cmd/Ctrl+Z (or Ctrl+Y).
+- Drawings are saved in the browser per symbol and stay put across timeframes.
 
 ## Bar replay
 

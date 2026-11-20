@@ -21,6 +21,9 @@
       </div>
       <button id="alert-btn" class="tbtn" title="Create alert (Alt+A)"><span class="ico" data-icon="alert"></span>Alert</button>
       <button id="replay-btn" class="tbtn" title="Bar replay"><span class="ico" data-icon="replay"></span>Replay</button>
+      <div class="sep"></div>
+      <button id="undo-btn" class="tbtn icon-only" title="Undo (Cmd/Ctrl+Z)"><span class="ico" data-icon="undo"></span></button>
+      <button id="redo-btn" class="tbtn icon-only" title="Redo (Shift+Cmd/Ctrl+Z)"><span class="ico" data-icon="redo"></span></button>
       <div class="spacer"></div>
       <span id="conn" class="conn" title="IBKR connection"></span>
       <button id="shot-btn" class="tbtn icon-only" title="Save chart image"><span class="ico" data-icon="camera"></span></button>
@@ -29,9 +32,18 @@
     <div id="body">
       <nav id="tools">
         <button data-tool="cross" class="active" title="Crosshair"><span class="ico" data-icon="cross"></span></button>
-        <button data-tool="trend" title="Trend line (click two points)"><span class="ico" data-icon="trend"></span></button>
-        <button data-tool="hline" title="Horizontal line (click a price)"><span class="ico" data-icon="hline"></span></button>
+        <button data-tool="trend" title="Trend line"><span class="ico" data-icon="trend"></span></button>
+        <button data-tool="ray" title="Ray"><span class="ico" data-icon="ray"></span></button>
+        <button data-tool="hline" title="Horizontal line"><span class="ico" data-icon="hline"></span></button>
+        <button data-tool="vline" title="Vertical line"><span class="ico" data-icon="vline"></span></button>
+        <button data-tool="channel" title="Parallel channel (3 clicks)"><span class="ico" data-icon="channel"></span></button>
+        <button data-tool="fib" title="Fib retracement"><span class="ico" data-icon="fib"></span></button>
+        <button data-tool="rect" title="Rectangle"><span class="ico" data-icon="rect"></span></button>
+        <button data-tool="text" title="Text"><span class="ico" data-icon="text"></span></button>
+        <button data-tool="ruler" title="Measure (click start, click end)"><span class="ico" data-icon="ruler"></span></button>
         <div class="tsep"></div>
+        <button id="draw-magnet" title="Magnet: snap to open/high/low/close"><span class="ico" data-icon="magnet"></span></button>
+        <button id="draw-lock" title="Lock all drawings"><span class="ico" data-icon="lock"></span></button>
         <button id="draw-hide" title="Hide drawings"><span class="ico" data-icon="eye"></span></button>
         <button id="draw-clear" title="Remove drawings on this chart"><span class="ico" data-icon="trash"></span></button>
       </nav>
