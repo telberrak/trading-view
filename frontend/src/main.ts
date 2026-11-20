@@ -19,6 +19,7 @@ import type { ISeriesApi } from 'lightweight-charts';
 import { initStudies } from './studies';
 import { initTrading } from './trading';
 import { initSideLayout } from './layout';
+import { loadColors, openChartSettings, withAlpha, type ChartColors } from './settings';
 import { attachSearch, shortName } from './search';
 import { initWatchlist, type Details } from './watchlist';
 import './style.css';
@@ -50,12 +51,12 @@ if (!TIMEFRAMES.includes(tf)) tf = '1D';
 
 // ---------- chart ----------
 const css = getComputedStyle(document.documentElement);
-const UP = css.getPropertyValue('--candle-up').trim();
-const DOWN = css.getPropertyValue('--candle-down').trim();
+void css;
+let colors: ChartColors = loadColors();
 const chart = createChart(el('chart'), {
   autoSize: true,
-  layout: { background: { type: ColorType.Solid, color: '#000000' }, textColor: '#dbdbdb', fontSize: 12, attributionLogo: false },
-  grid: { vertLines: { color: '#0e0e0e' }, horzLines: { color: '#0e0e0e' } },
+  layout: { background: { type: ColorType.Solid, color: colors.bg }, textColor: colors.text, fontSize: 12, attributionLogo: false },
+  grid: { vertLines: { color: colors.grid, visible: colors.gridOn }, horzLines: { color: colors.grid, visible: colors.gridOn } },
   crosshair: { mode: CrosshairMode.Normal,
     vertLine: { color: '#6a6a6a', style: LineStyle.Dashed, labelBackgroundColor: '#2a2a2a' },
     horzLine: { color: '#6a6a6a', style: LineStyle.Dashed, labelBackgroundColor: '#2a2a2a' } },
@@ -63,7 +64,6 @@ const chart = createChart(el('chart'), {
   timeScale: { borderColor: '#2a2a2a', rightOffset: 10, timeVisible: true, secondsVisible: false },
 });
 const candles = chart.addSeries(CandlestickSeries, {
-  upColor: UP, downColor: DOWN, borderVisible: false, wickUpColor: UP, wickDownColor: DOWN,
 });
 const volume = chart.addSeries(HistogramSeries, { priceFormat: { type: 'volume' }, priceScaleId: 'vol',
   lastValueVisible: false, priceLineVisible: false });
@@ -81,14 +81,16 @@ let styleSeries: ISeriesApi<'Bar'> | ISeriesApi<'Line'> | ISeriesApi<'Area'> | n
 const CLEAR = 'rgba(0,0,0,0)';
 function applyChartType() {
   if (styleSeries) { chart.removeSeries(styleSeries); styleSeries = null; }
-  const solid = { upColor: UP, downColor: DOWN, borderVisible: false, wickUpColor: UP, wickDownColor: DOWN, lastValueVisible: true, priceLineVisible: true };
+  const c = colors;
+  const solid = { upColor: c.up, downColor: c.down, borderVisible: c.border, borderUpColor: c.borderUp, borderDownColor: c.borderDown,
+    wickUpColor: c.wickUp, wickDownColor: c.wickDown, lastValueVisible: true, priceLineVisible: true };
   if (chartType === 'candles' || chartType === 'ha') candles.applyOptions(solid);
-  else if (chartType === 'hollow') candles.applyOptions({ ...solid, upColor: CLEAR, borderVisible: true, borderUpColor: UP, borderDownColor: DOWN });
+  else if (chartType === 'hollow') candles.applyOptions({ ...solid, upColor: CLEAR, borderVisible: true, borderUpColor: c.border ? c.borderUp : c.up, borderDownColor: c.border ? c.borderDown : c.down });
   else {
     candles.applyOptions({ upColor: CLEAR, downColor: CLEAR, borderVisible: false, wickUpColor: CLEAR, wickDownColor: CLEAR, lastValueVisible: false, priceLineVisible: false });
-    if (chartType === 'bars') styleSeries = chart.addSeries(BarSeries, { upColor: UP, downColor: DOWN, thinBars: false });
-    else if (chartType === 'line') styleSeries = chart.addSeries(LineSeries, { color: '#2962ff', lineWidth: 2 });
-    else styleSeries = chart.addSeries(AreaSeries, { lineColor: '#2962ff', topColor: 'rgba(41,98,255,.35)', bottomColor: 'rgba(41,98,255,0)', lineWidth: 2 });
+    if (chartType === 'bars') styleSeries = chart.addSeries(BarSeries, { upColor: c.up, downColor: c.down, thinBars: false });
+    else if (chartType === 'line') styleSeries = chart.addSeries(LineSeries, { color: c.line, lineWidth: 2 });
+    else styleSeries = chart.addSeries(AreaSeries, { lineColor: c.line, topColor: withAlpha(c.line, 0.35), bottomColor: withAlpha(c.line, 0), lineWidth: 2 });
   }
   el('ct-btn').innerHTML = icon(`ct-${chartType}`);
   el('ct-btn').title = `Chart type: ${CHART_TYPES[chartType]}`;
@@ -133,7 +135,7 @@ let pendingRange: number | null = null;
 // IBKR sends UTC; shift intraday bars so the axis shows your local time.
 const shift = (t: number) => (INTRADAY.has(tf) ? t - new Date(t * 1000).getTimezoneOffset() * 60 : t);
 const volBar = (b: Bar) => ({ time: b.time as UTCTimestamp, value: b.volume,
-  color: b.close >= b.open ? 'rgba(38,120,110,.75)' : 'rgba(140,48,44,.75)' });
+  color: withAlpha(b.close >= b.open ? colors.volUp : colors.volDown, 0.75) });
 
 const studies = initStudies({ chart, getBars: () => bars, isIntraday: () => INTRADAY.has(tf), wrap: el('chart-wrap'),
   onChange: () => renderLegend() });
@@ -313,6 +315,19 @@ document.addEventListener('click', () => { indMenu.hidden = true; });
 indMenu.onclick = (e) => e.stopPropagation();
 
 // ---------- toolbar extras ----------
+function applyColors(c: ChartColors) {
+  colors = c;
+  chart.applyOptions({ layout: { background: { type: ColorType.Solid, color: c.bg }, textColor: c.text },
+    grid: { vertLines: { color: c.grid, visible: c.gridOn }, horzLines: { color: c.grid, visible: c.gridOn } } });
+  volume.applyOptions({ visible: c.volume });
+  candles.priceScale().applyOptions({ scaleMargins: { top: 0.08, bottom: c.volume ? 0.24 : 0.08 } });
+  volume.setData(bars.map(volBar));
+  applyChartType();
+  el('chart-wrap').style.background = c.bg;
+}
+el('settings-btn').onclick = () => openChartSettings(colors, applyColors);
+applyColors(colors);
+
 el('shot-btn').onclick = () => {
   const a = document.createElement('a');
   a.href = chart.takeScreenshot().toDataURL('image/png');

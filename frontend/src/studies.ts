@@ -7,7 +7,12 @@ import { atr, bollinger, emaArr, macd, rsi, smaArr, stochastic, vwap, type Bar }
  * the way TradingView stacks them. Settings persist in localStorage.
  */
 export type Kind = 'ema' | 'sma' | 'vwap' | 'bb' | 'rsi' | 'macd' | 'stoch' | 'atr';
-export interface StudyCfg { id: string; kind: Kind; params: number[]; color: string; on: boolean }
+export interface StudyCfg { id: string; kind: Kind; params: number[]; color: string; on: boolean; colors?: Record<string, string>; width?: number }
+
+/** Apply the user's colour choices (per output line) on top of the defaults. */
+function styled(c: StudyCfg, outs: Output[]): Output[] {
+  return outs.map((o) => (o.hist || !c.colors?.[o.name] ? o : { ...o, color: c.colors[o.name] }));
+}
 
 interface Output { name: string; color: string; values: number[]; hist?: boolean; colors?: string[]; dashed?: boolean }
 interface Def {
@@ -88,11 +93,11 @@ export function initStudies({ chart, getBars, isIntraday, wrap, onChange }: Ctx)
     for (const c of visible()) {
       const def = DEFS[c.kind];
       const idx = def.pane ? ++pane : 0;
-      const outs = def.calc([], c.params, c.color);
+      const outs = styled(c, def.calc([], c.params, c.color));
       const series = outs.map((o, j) => {
         const s = o.hist
           ? chart.addSeries(HistogramSeries, { color: o.color, priceLineVisible: false, lastValueVisible: false }, idx)
-          : chart.addSeries(LineSeries, { color: o.color, lineWidth: 1, priceLineVisible: false, lastValueVisible: !def.pane || j > 0 || outs.length === 1,
+          : chart.addSeries(LineSeries, { color: o.color, lineWidth: (c.width ?? 1) as 1 | 2 | 3 | 4, priceLineVisible: false, lastValueVisible: !def.pane || j > 0 || outs.length === 1,
             crosshairMarkerVisible: false, lineStyle: o.dashed ? LineStyle.Dashed : LineStyle.Solid }, idx);
         return s;
       });
@@ -112,7 +117,7 @@ export function initStudies({ chart, getBars, isIntraday, wrap, onChange }: Ctx)
     for (const c of visible()) {
       const b = built.get(c.id);
       if (!b) continue;
-      b.out = DEFS[c.kind].calc(bars, c.params, c.color);
+      b.out = styled(c, DEFS[c.kind].calc(bars, c.params, c.color));
       b.out.forEach((o, j) => {
         const data = [];
         for (let i = 0; i < bars.length; i++) {
@@ -121,7 +126,7 @@ export function initStudies({ chart, getBars, isIntraday, wrap, onChange }: Ctx)
           if (o.colors) pt.color = o.colors[i];
           data.push(pt);
         }
-        if (!o.hist) b.series[j].applyOptions({ color: o.color });
+        if (!o.hist) b.series[j].applyOptions({ color: o.color, lineWidth: (c.width ?? 1) as 1 | 2 | 3 | 4 });
         b.series[j].setData(data);
       });
     }
@@ -168,15 +173,43 @@ export function initStudies({ chart, getBars, isIntraday, wrap, onChange }: Ctx)
     compute();
     onChange();
   }
-  function editParams(c: StudyCfg) {
+  /** Settings dialog: lengths, colour of each line and line width. */
+  function openSettings(c: StudyCfg, done: () => void) {
     const def = DEFS[c.kind];
-    if (!def.params.length) return;
-    const s = window.prompt(`${def.title}: ${def.params.map((p) => p[0]).join(', ')}`, c.params.join(', '));
-    if (s == null) return;
-    const v = s.split(/[,\s]+/).map(Number).filter((x) => x > 0);
-    if (v.length !== def.params.length) return;
-    c.params = v.map((x, i) => (def.params[i][0] === 'StdDev' ? x : Math.round(x)));
-    c.on = true;
+    const outs = styled(c, def.calc([], c.params, c.color)).filter((o) => !o.hist);
+    const dlg = document.createElement('dialog');
+    dlg.className = 'study-dlg';
+    dlg.innerHTML = `<form method="dialog"><h3></h3>
+      ${def.params.map(([n], i) => `<label>${n}<input type="number" step="any" min="0" data-p="${i}" value="${c.params[i]}" /></label>`).join('')}
+      <div class="sd-colors">${outs.map((o) => `<label class="sd-color"><input type="color" data-o="${o.name}" value="${o.color}" /><span>${o.name}</span></label>`).join('')}</div>
+      <label>Line width <select data-w>${[1, 2, 3, 4].map((w) => `<option ${w === (c.width ?? 1) ? 'selected' : ''}>${w}</option>`).join('')}</select></label>
+      <div class="dlg-btns"><button type="button" data-reset>Defaults</button><span class="spacer"></span><button value="cancel">Cancel</button><button value="ok" class="primary">OK</button></div></form>`;
+    dlg.querySelector('h3')!.textContent = def.title;
+    document.body.appendChild(dlg);
+    dlg.querySelector<HTMLButtonElement>('[data-reset]')!.onclick = () => {
+      def.params.forEach(([, d], i) => (dlg.querySelector<HTMLInputElement>(`[data-p="${i}"]`)!.value = String(d)));
+      const base = def.calc([], def.params.map((p) => p[1]), c.color).filter((o) => !o.hist);
+      base.forEach((o) => (dlg.querySelector<HTMLInputElement>(`[data-o="${o.name}"]`)!.value = o.color));
+      dlg.querySelector<HTMLSelectElement>('[data-w]')!.value = '1';
+    };
+    dlg.addEventListener('close', () => {
+      if (dlg.returnValue === 'ok') {
+        const v = def.params.map((_, i) => Number(dlg.querySelector<HTMLInputElement>(`[data-p="${i}"]`)!.value));
+        if (v.every((x) => x > 0)) c.params = v.map((x, i) => (def.params[i][0] === 'StdDev' ? x : Math.round(x)));
+        const colors: Record<string, string> = {};
+        dlg.querySelectorAll<HTMLInputElement>('[data-o]').forEach((inp) => (colors[inp.dataset.o!] = inp.value));
+        c.colors = colors;
+        const base = def.calc([], c.params, c.color).filter((o) => !o.hist);
+        const main = base.find((o) => o.color === c.color) ?? base[0]; // the line drawn in the study's own colour
+        if (main) c.color = colors[main.name] ?? c.color; // legend + menu swatch follow it
+        c.width = Number(dlg.querySelector<HTMLSelectElement>('[data-w]')!.value);
+        c.on = true;
+        builtSig = ''; // rebuild series so width/colours apply everywhere
+        done();
+      }
+      dlg.remove();
+    });
+    dlg.showModal();
   }
   function renderMenu(menu: HTMLElement) {
     menu.innerHTML = '<div class="hint">On chart (click to show or hide)</div>';
@@ -187,10 +220,10 @@ export function initStudies({ chart, getBars, isIntraday, wrap, onChange }: Ctx)
       b.innerHTML = `<span class="swatch" style="background:${c.color};opacity:${c.on ? 1 : 0.25}"></span><span></span><span class="spacer"></span>`;
       (b.children[1] as HTMLElement).textContent = def.label(c.params) + (def.intradayOnly ? ' (intraday)' : '');
       b.onclick = (e) => { e.stopPropagation(); c.on = !c.on; changed(); renderMenu(menu); };
-      if (def.params.length) {
+      {
         const ed = document.createElement('span');
-        ed.className = 'mini'; ed.textContent = 'edit';
-        ed.onclick = (e) => { e.stopPropagation(); editParams(c); changed(); renderMenu(menu); };
+        ed.className = 'mini'; ed.textContent = 'settings';
+        ed.onclick = (e) => { e.stopPropagation(); openSettings(c, () => { changed(); renderMenu(menu); }); };
         b.appendChild(ed);
       }
       const del = document.createElement('span');

@@ -275,3 +275,15 @@ dialog label[hidden] { display: none; }
 #side-split:hover, .split-h:hover, #side-split.dragging, .split-h.dragging { background: #2962ff; }
 body.resizing, body.resizing * { user-select: none; }
 body.resizing iframe, body.resizing #chart { pointer-events: none; }
+
+/* settings dialogs */
+.settings-dlg { width: 440px; }
+.cs-group { margin-bottom: 12px; }
+.cs-title { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
+.cs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; }
+dialog label.cs-item, dialog label.sd-color { flex-direction: row; align-items: center; gap: 8px; margin: 0; color: var(--text); font-size: 13px; }
+dialog input[type=color] { width: 30px; height: 24px; padding: 0; border: 1px solid var(--border); border-radius: 4px; background: none; cursor: pointer; }
+dialog input[type=color]::-webkit-color-swatch-wrapper { padding: 2px; }
+dialog input[type=color]::-webkit-color-swatch { border: 0; border-radius: 2px; }
+.sd-colors { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; margin-bottom: 12px; }
+.dlg-btns .spacer { flex: 1; }

@@ -45,6 +45,11 @@ Force one with `set IB_PORT=7497` before `start.bat` (Windows) or `IB_PORT=7497 
 - The wallet icon on the right rail opens positions, working orders (× cancels) and today's fills. Positions and working orders also show as lines on the chart.
 - If TWS shows its own order-precaution pop-ups, they still need clicking in TWS (or turn them off under API > Precautions).
 
+## Colours
+
+- The gear icon in the top bar opens chart settings: candle body, wick and border colours, line/area colour, background, grid, scale text and volume colours (or hide volume). Changes preview live; "Defaults" resets.
+- In the Indicators menu, "settings" on any indicator changes its lengths, the colour of each of its lines and the line width.
+
 ## Layout
 
 - Drag the left edge of the right sidebar to make it wider or narrower, and drag the bars between the watchlist, details, trading and alerts panels to resize them. Sizes are remembered; double-click a bar to reset it.
