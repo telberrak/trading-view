@@ -18,6 +18,7 @@ import { type Bar } from './indicators';
 import type { ISeriesApi } from 'lightweight-charts';
 import { initStudies } from './studies';
 import { initTrading } from './trading';
+import { initSideLayout } from './layout';
 import { attachSearch, shortName } from './search';
 import { initWatchlist, type Details } from './watchlist';
 import './style.css';
@@ -398,6 +399,7 @@ el('rp-play').innerHTML = icon('play', 18);
 el('rp-step').innerHTML = icon('step', 18);
 
 // ---------- right rail toggles ----------
+const sideLayout = initSideLayout();
 function railToggle(btnId: string, panelId: string, store: string, dflt = true) {
   const btn = el(btnId), panel = el(panelId);
   const apply = (on: boolean) => {
@@ -405,6 +407,7 @@ function railToggle(btnId: string, panelId: string, store: string, dflt = true) 
     panel.classList.toggle('hidden', !on);
     const anyOn = ['watchlist', 'details', 'trading', 'alerts'].some((id) => !el(id).classList.contains('hidden'));
     el('side').classList.toggle('hidden', !anyOn);
+    sideLayout.layout();
   };
   let on = load(store, dflt);
   apply(on);

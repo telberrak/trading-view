@@ -94,7 +94,7 @@ button:disabled { color: #555; cursor: default; }
 #clock { color: var(--text); font-variant-numeric: tabular-nums; padding-right: 4px; }
 
 /* ---------- right side ---------- */
-#side { width: 350px; flex: none; display: flex; flex-direction: column; min-height: 0; border-left: 4px solid #121212; }
+#side { width: 350px; flex: none; display: flex; flex-direction: column; min-height: 0; }
 #side.hidden { display: none; }
 #watchlist { flex: 1; display: flex; flex-direction: column; min-height: 120px; }
 #watchlist.hidden, #details.hidden { display: none; }
@@ -244,7 +244,7 @@ dialog label[hidden] { display: none; }
 .toast.buy { border-color: #2962ff; } .toast.sell { border-color: var(--red); }
 
 /* details extras + news */
-#details { overflow-y: auto; max-height: 62vh; }
+#details { overflow-y: auto; min-height: 0; }
 .d-range { margin-top: 12px; font-size: 12px; }
 .d-range-h { color: var(--muted); margin-bottom: 6px; }
 .d-range-bar { position: relative; height: 3px; background: #2a2a2a; border-radius: 2px; }
@@ -265,3 +265,13 @@ dialog label[hidden] { display: none; }
 .nd-meta { color: var(--muted); font-size: 12px; margin: 4px 0 10px; }
 .nd-body { flex: 1; min-height: 0; }
 .nd-body iframe { width: 100%; height: 100%; border: 0; }
+
+/* resizable sidebar */
+#side > section { border-top: 0 !important; overflow: hidden; }
+#side > #details { overflow-y: auto; }
+#side-split { width: 4px; flex: none; background: #121212; cursor: col-resize; }
+#side-split[hidden] { display: none; }
+.split-h { height: 4px; flex: none; background: #121212; cursor: row-resize; }
+#side-split:hover, .split-h:hover, #side-split.dragging, .split-h.dragging { background: #2962ff; }
+body.resizing, body.resizing * { user-select: none; }
+body.resizing iframe, body.resizing #chart { pointer-events: none; }
