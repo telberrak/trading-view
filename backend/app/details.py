@@ -50,6 +50,11 @@ async def details(ib: IB, key: str) -> dict:
             "hours": (cd.liquidHours if r.sec_type == "STK" else cd.tradingHours) if cd else "",
             "tz": cd.timeZoneId if cd else "",
             "expiry": getattr(r.live, "lastTradeDateOrContractMonth", ""),
+            "industry": (cd.industry if cd else "") or "",
+            "category": (cd.category if cd else "") or "",
+            "minTick": cd.minTick if cd else None,
+            "multiplier": r.live.multiplier or "",
+            "localSymbol": r.live.localSymbol or "",
         }
     d = dict(_cache[key])
     d["open"] = is_open(d.pop("hours"), d.pop("tz"))

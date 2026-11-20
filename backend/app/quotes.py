@@ -24,7 +24,10 @@ def snapshot(t: Ticker) -> dict:
     last = _num(t.last) or _num(t.marketPrice()) or _num(t.close)
     prev = _num(t.close)
     vol = _num(t.volume)
-    out = {"last": last, "prevClose": prev, "change": None, "changePct": None, "volume": vol}
+    out = {"last": last, "prevClose": prev, "change": None, "changePct": None, "volume": vol,
+           "bid": _num(t.bid), "ask": _num(t.ask), "open": _num(t.open), "high": _num(t.high), "low": _num(t.low),
+           "high52": _num(getattr(t, "high52week", None)), "low52": _num(getattr(t, "low52week", None)),
+           "avgVolume": _num(getattr(t, "avVolume", None))}
     if last is not None and prev is not None:
         out["change"] = last - prev
         out["changePct"] = (last - prev) / prev * 100
@@ -49,7 +52,7 @@ class QuoteSession:
                 continue
             try:
                 r = await contracts.resolve(self.ib, k)
-                self.tickers[k] = self.ib.reqMktData(r.live, "", False, False)
+                self.tickers[k] = self.ib.reqMktData(r.live, "165" if r.sec_type == "STK" else "", False, False)  # 165: 52-week range, avg volume
             except Exception as e:  # noqa: BLE001
                 self.queue.put_nowait({"type": "quote_error", "key": k, "message": str(e)})
 

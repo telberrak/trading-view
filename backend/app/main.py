@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from ib_async import IB
 
-from . import contracts, watchlists
+from . import contracts, news, watchlists
 from .details import details as symbol_details
 from .quotes import QuoteSession
 from .alerts import AlertEngine
@@ -192,6 +192,24 @@ async def delete_alert(alert_id: str):
     alerts.delete(alert_id)
     broadcast({"type": "alerts", "alerts": alerts.list()})
     return {"ok": True}
+
+
+@app.get("/api/news")
+async def get_news(key: str):
+    if not ib.isConnected():
+        return JSONResponse({"error": "Not connected to IBKR"}, status_code=503)
+    try:
+        return await news.headlines(ib, key.upper())
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@app.get("/api/news/article")
+async def get_article(provider: str, id: str):  # noqa: A002
+    try:
+        return await news.article(ib, provider, id)
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"error": str(e) or "Article not available"}, status_code=404)
 
 
 @app.get("/api/account")

@@ -45,6 +45,11 @@ Force one with `set IB_PORT=7497` before `start.bat` (Windows) or `IB_PORT=7497 
 - The wallet icon on the right rail opens positions, working orders (× cancels) and today's fills. Positions and working orders also show as lines on the chart.
 - If TWS shows its own order-precaution pop-ups, they still need clicking in TWS (or turn them off under API > Precautions).
 
+## Symbol details and news
+
+- The details panel (info icon on the right rail) shows price, day and 52-week range, open, bid/ask, volume and average volume, sector, and for futures the contract, multiplier and tick size.
+- News lists recent headlines for the symbol from the news feeds your IBKR account has (the free API feeds are usually Briefing.com and Dow Jones); click one to read it. Futures and crypto rarely have symbol news.
+
 ## Bar replay
 
 Replay button > click the bar to start from. Then play/pause, step one bar (Shift+Right), pick a speed, choose a new start or exit.

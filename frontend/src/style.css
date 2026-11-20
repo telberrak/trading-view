@@ -242,3 +242,26 @@ dialog label[hidden] { display: none; }
 .ot-line { margin-bottom: 6px; } .ot-line.muted { color: var(--muted); font-size: 12px; }
 .ot-warn { margin: 10px 0 4px; padding: 8px 10px; border-radius: 4px; background: #2a1416; color: #ff8a93; font-size: 12px; }
 .toast.buy { border-color: #2962ff; } .toast.sell { border-color: var(--red); }
+
+/* details extras + news */
+#details { overflow-y: auto; max-height: 62vh; }
+.d-range { margin-top: 12px; font-size: 12px; }
+.d-range-h { color: var(--muted); margin-bottom: 6px; }
+.d-range-bar { position: relative; height: 3px; background: #2a2a2a; border-radius: 2px; }
+.d-range-bar i { position: absolute; top: -3px; width: 2px; height: 9px; margin-left: -1px; background: var(--text); }
+.d-range-v { display: flex; justify-content: space-between; margin-top: 5px; font-variant-numeric: tabular-nums; }
+#details .d-stats .n { text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.d-news { margin-top: 16px; border-top: 1px solid #1c1c1c; padding-top: 10px; }
+.d-news-h { font-weight: 600; margin-bottom: 6px; }
+.d-news-empty { color: var(--muted); font-size: 12px; }
+.d-news-row { display: block; width: 100%; text-align: left; padding: 6px 4px; border-radius: 4px; }
+.d-news-row:hover { background: var(--hover); }
+.d-news-row .nt { display: block; color: var(--muted); font-size: 11px; }
+.d-news-row .nh { display: block; font-size: 13px; line-height: 1.35; }
+#news-dlg { width: min(720px, 92vw); height: min(640px, 86vh); display: none; flex-direction: column; padding: 16px 18px; }
+#news-dlg[open] { display: flex; }
+.nd-head { display: flex; gap: 12px; align-items: flex-start; font-size: 15px; }
+.nd-head b { flex: 1; } .nd-head button { color: var(--muted); font-size: 18px; }
+.nd-meta { color: var(--muted); font-size: 12px; margin: 4px 0 10px; }
+.nd-body { flex: 1; min-height: 0; }
+.nd-body iframe { width: 100%; height: 100%; border: 0; }

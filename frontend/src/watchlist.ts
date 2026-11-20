@@ -3,8 +3,11 @@ import { attachSearch, shortName } from './search';
 
 interface WatchList { name: string; symbols: string[] } // entries starting with "###" are section headers
 interface Data { active: number; lists: WatchList[] }
-interface Quote { last: number | null; change: number | null; changePct: number | null; volume: number | null; prevClose: number | null }
-export interface Details { key: string; name: string; exchange: string; secType: string; currency: string; open: boolean | null; expiry?: string }
+interface Quote { last: number | null; change: number | null; changePct: number | null; volume: number | null; prevClose: number | null;
+  bid?: number | null; ask?: number | null; open?: number | null; high?: number | null; low?: number | null; high52?: number | null; low52?: number | null; avgVolume?: number | null }
+interface NewsItem { time: number | null; provider: string; id: string; headline: string }
+export interface Details { key: string; name: string; exchange: string; secType: string; currency: string; open: boolean | null; expiry?: string;
+  industry?: string; category?: string; minTick?: number | null; multiplier?: string; localSymbol?: string }
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const SEC = '###';
@@ -142,9 +145,12 @@ export function initWatchlist(onPick: (key: string) => void, onDetails: (d: Deta
   }
 
   // ---------- symbol details panel ----------
-  const det = $('details');
+  $('details').innerHTML = '<div class="d-main"></div><div class="d-news" hidden><div class="d-news-h">News</div><div class="d-news-list"></div></div>';
+  const det = $('details').querySelector('.d-main') as HTMLElement; // re-rendered on every quote
+  const newsBox = $('details').querySelector('.d-news') as HTMLElement; // rendered only when news changes
   function renderDetails() {
-    if (!activeKey) { det.innerHTML = ''; return; }
+    if (!activeKey) { det.innerHTML = ''; newsBox.hidden = true; return; }
+    newsBox.hidden = false;
     const q = quotes.get(activeKey);
     const d = details?.key === activeKey ? details : null;
     const dir = q?.change == null ? '' : q.change >= 0 ? 'up' : 'down';
@@ -156,13 +162,91 @@ export function initWatchlist(onPick: (key: string) => void, onDetails: (d: Deta
       <div class="d-price"><span class="big ${dir}">${price(q?.last)}</span><span class="cur">${d?.currency ?? ''}</span>
         <span class="chg ${dir}">${q?.change == null ? '' : `${sign(q.change)}${price(q.change)}&nbsp;&nbsp;${sign(q.changePct!)}${q.changePct!.toFixed(2)}%`}</span></div>
       ${d?.open == null ? '' : `<div class="d-status ${d.open ? 'open' : 'closed'}">${d.open ? 'Market open' : 'Market closed'}</div>`}
-      <div class="d-stats"><span>Prev close</span><span class="n">${price(q?.prevClose)}</span>
-        <span>Volume</span><span class="n">${vol(q?.volume) || '–'}</span></div>`;
+      ${rangeBar("Day's range", q?.low, q?.high, q?.last)}
+      ${rangeBar('52-week range', q?.low52, q?.high52, q?.last)}
+      <div class="d-stats">
+        <span>Prev close</span><span class="n">${price(q?.prevClose)}</span>
+        <span>Open</span><span class="n">${price(q?.open)}</span>
+        <span>Bid / Ask</span><span class="n">${q?.bid || q?.ask ? `${price(q?.bid)} / ${price(q?.ask)}` : '–'}</span>
+        <span>Volume</span><span class="n">${vol(q?.volume) || '–'}</span>
+        ${q?.avgVolume ? `<span>Avg volume</span><span class="n">${vol(q.avgVolume)}</span>` : ''}
+        ${d?.secType === 'FUT' ? `<span>Contract</span><span class="n">${d.localSymbol ?? ''}</span><span>Multiplier</span><span class="n">${d.multiplier || '–'}</span><span>Tick size</span><span class="n">${d.minTick ?? '–'}</span>` : ''}
+        ${d?.industry ? `<span>Sector</span><span class="n d-ind"></span>` : ''}
+      </div>`;
+    const ind = det.querySelector('.d-ind') as HTMLElement | null;
+    if (ind && d) ind.textContent = d.category ? `${d.industry} · ${d.category}` : d.industry!;
     (det.querySelector('.sym') as HTMLElement).textContent = shortName(activeKey);
     (det.querySelector('.d-name') as HTMLElement).textContent = d ? `${d.name} · ${d.exchange}` : '';
     (det.querySelector('.d-type') as HTMLElement).textContent = d
       ? `${TYPE[d.secType] ?? d.secType}${d.secType === 'FUT' && d.expiry ? ` · front month ${d.expiry}` : ''}` : '';
   }
+  function rangeBar(label: string, lo?: number | null, hi?: number | null, last?: number | null) {
+    if (lo == null || hi == null || hi <= lo) return '';
+    const pct = last == null ? 50 : Math.max(0, Math.min(100, ((last - lo) / (hi - lo)) * 100));
+    return `<div class="d-range"><div class="d-range-h">${label}</div><div class="d-range-bar"><i style="left:${pct}%"></i></div>
+      <div class="d-range-v"><span>${price(lo)}</span><span>${price(hi)}</span></div></div>`;
+  }
+
+  // ---------- news ----------
+  let news: { key: string; items: NewsItem[]; providers: string[]; error?: string } | null = null;
+  function renderNews() {
+    const box = newsBox.querySelector('.d-news-list') as HTMLElement | null;
+    if (!box) return;
+    if (!news || news.key !== activeKey) { box.innerHTML = '<div class="d-news-empty">Loading…</div>'; return; }
+    if (news.error) { box.innerHTML = `<div class="d-news-empty"></div>`; box.firstElementChild!.textContent = news.error; return; }
+    if (!news.providers.length) { box.innerHTML = '<div class="d-news-empty">No news feeds on this IBKR account.</div>'; return; }
+    if (!news.items.length) { box.innerHTML = '<div class="d-news-empty">No recent headlines for this symbol.</div>'; return; }
+    box.innerHTML = '';
+    for (const n of news.items.slice(0, 25)) {
+      const row = document.createElement('button');
+      row.className = 'd-news-row';
+      const when = n.time ? new Date(n.time * 1000) : null;
+      const t = when ? (Date.now() - when.getTime() < 86400e3 ? when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+        : when.toLocaleDateString([], { day: 'numeric', month: 'short' })) : '';
+      row.innerHTML = '<span class="nt"></span><span class="nh"></span>';
+      (row.firstElementChild as HTMLElement).textContent = `${t} · ${n.provider}`;
+      (row.lastElementChild as HTMLElement).textContent = n.headline;
+      row.onclick = () => openArticle(n);
+      box.appendChild(row);
+    }
+  }
+  async function loadNews(k: string) {
+    try {
+      const r = await fetch(`/api/news?key=${encodeURIComponent(k)}`);
+      const j = await r.json();
+      if (k !== activeKey) return;
+      news = r.ok ? { key: k, items: j.items, providers: j.providers } : { key: k, items: [], providers: [], error: j.error };
+    } catch { news = { key: k, items: [], providers: [], error: 'News unavailable' }; }
+    renderNews();
+  }
+  const newsDlg = document.createElement('dialog');
+  newsDlg.id = 'news-dlg';
+  document.body.appendChild(newsDlg);
+  newsDlg.addEventListener('click', (e) => { if (e.target === newsDlg) newsDlg.close(); });
+  async function openArticle(n: NewsItem) {
+    newsDlg.innerHTML = '<div class="nd-head"><b></b><button title="Close">×</button></div><div class="nd-meta"></div><div class="nd-body">Loading…</div>';
+    (newsDlg.querySelector('b') as HTMLElement).textContent = n.headline;
+    (newsDlg.querySelector('.nd-meta') as HTMLElement).textContent = `${n.provider}${n.time ? ' · ' + new Date(n.time * 1000).toLocaleString() : ''}`;
+    newsDlg.querySelector('button')!.onclick = () => newsDlg.close();
+    newsDlg.showModal();
+    const body = newsDlg.querySelector('.nd-body') as HTMLElement;
+    try {
+      const r = await fetch(`/api/news/article?provider=${encodeURIComponent(n.provider)}&id=${encodeURIComponent(n.id)}`);
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error);
+      if (j.type === 1) {
+        body.innerHTML = `<a download="article.pdf" href="data:application/pdf;base64,${j.text}">Download article (PDF)</a>`;
+      } else {
+        const f = document.createElement('iframe');
+        f.setAttribute('sandbox', ''); // provider HTML is shown without scripts
+        f.srcdoc = `<style>body{font:14px/1.5 -apple-system,system-ui,sans-serif;color:#dbdbdb;background:#1e1e1e;margin:0}a{color:#6ea0ff}</style>${j.text}`;
+        body.innerHTML = '';
+        body.appendChild(f);
+      }
+    } catch (e) { body.textContent = (e as Error).message || 'Article not available'; }
+  }
+  setInterval(() => { if (activeKey) loadNews(activeKey); }, 5 * 60_000);
+
   async function loadDetails(k: string) {
     try {
       const r = await fetch(`/api/details?key=${encodeURIComponent(k)}`);
@@ -255,7 +339,9 @@ export function initWatchlist(onPick: (key: string) => void, onDetails: (d: Deta
       sendSymbols();
       renderDetails();
       loadDetails(k);
+      renderNews();
+      loadNews(k);
     },
-    resubscribe() { sendSymbols(); if (activeKey) loadDetails(activeKey); },
+    resubscribe() { sendSymbols(); if (activeKey) { loadDetails(activeKey); loadNews(activeKey); } },
   };
 }
