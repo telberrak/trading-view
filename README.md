@@ -28,6 +28,12 @@ Force one with `set IB_PORT=7497` before `start.bat` (Windows) or `IB_PORT=7497 
 - Left toolbar: crosshair, trend line (click two points), horizontal line (click a price), hide and clear drawings. Drawings are saved in the browser per symbol.
 - Top right: save chart image, full screen. Right rail: show/hide the watchlist and the symbol details panel.
 
+## Bar replay
+
+Replay button > click the bar to start from. Then play/pause, step one bar (Shift+Right), pick a speed, choose a new start or exit.
+Live updates keep arriving in the background and appear when you exit. How far back you can go depends on how much history
+IBKR returns for the timeframe (about 3 days of 1m bars, months of 1h bars, years of daily bars).
+
 ## Alerts
 
 - Alert button (or Alt+A) on the current symbol: Crossing, Greater than or Less than a price, with an optional message.

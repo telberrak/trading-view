@@ -20,7 +20,7 @@
         <div id="ind-menu" class="menu" hidden></div>
       </div>
       <button id="alert-btn" class="tbtn" title="Create alert (Alt+A)"><span class="ico" data-icon="alert"></span>Alert</button>
-      <button class="tbtn" disabled title="Bar replay is on the roadmap"><span class="ico" data-icon="replay"></span>Replay</button>
+      <button id="replay-btn" class="tbtn" title="Bar replay"><span class="ico" data-icon="replay"></span>Replay</button>
       <div class="spacer"></div>
       <span id="conn" class="conn" title="IBKR connection"></span>
       <button id="shot-btn" class="tbtn icon-only" title="Save chart image"><span class="ico" data-icon="camera"></span></button>
@@ -40,6 +40,14 @@
           <div id="legend"></div>
           <div id="chart"></div>
           <div id="notice" hidden></div>
+          <div id="replay-bar" hidden>
+            <button id="rp-select" title="Pick a new start bar">Select bar</button>
+            <button id="rp-play" title="Play / pause"></button>
+            <button id="rp-step" title="Forward one bar (Shift+Right)"></button>
+            <select id="rp-speed" title="Speed"><option value="3000">0.3x</option><option value="1000" selected>1x</option><option value="300">3x</option><option value="100">10x</option></select>
+            <span id="rp-hint"></span>
+            <button id="rp-exit" title="Back to real time">Exit replay</button>
+          </div>
         </section>
         <footer id="rangebar">
           <div id="ranges" class="group"></div>

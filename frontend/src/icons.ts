@@ -16,6 +16,9 @@ const P: Record<string, string> = {
   plus: '<path d="M12 5v14M5 12h14"/>',
   more: '<circle cx="6" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="18" cy="12" r="1"/>',
   chevron: '<path d="M7 10l5 5 5-5"/>',
+  play: '<path d="M8 5.5v13l10-6.5z" fill="currentColor"/>',
+  pause: '<path d="M8 5v14M16 5v14" stroke-width="3"/>',
+  step: '<path d="M6 5.5v13l9-6.5zM18 5v14" fill="currentColor"/>',
   calendar: '<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>',
 };
 

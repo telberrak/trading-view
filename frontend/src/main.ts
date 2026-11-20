@@ -73,7 +73,9 @@ const drawings = initDrawings(chart, candles, el('chart-wrap'));
 
 const lines = new Map<string, ISeriesApi<'Line'>>();
 const lineData = new Map<string, Point[]>();
-let bars: Bar[] = [];
+let bars: Bar[] = []; // what the chart shows (a prefix of allBars during replay)
+let allBars: Bar[] = [];
+let replayIdx: number | null = null; // index of the last visible bar while replaying
 let label = '';
 let loading = false;
 let details: Details | null = null;
@@ -115,7 +117,8 @@ function applyRange(days: number) {
 }
 
 function setHistory(raw: Bar[]) {
-  bars = raw.map((b) => ({ ...b, time: shift(b.time) }));
+  allBars = raw.map((b) => ({ ...b, time: shift(b.time) }));
+  bars = replayIdx == null ? allBars : allBars.slice(0, replayIdx + 1);
   candles.setData(bars.map((b) => ({ ...b, time: b.time as UTCTimestamp })));
   volume.setData(bars.map(volBar));
   computeIndicators();
@@ -126,9 +129,11 @@ function setHistory(raw: Bar[]) {
 
 function updateBar(raw: Bar) {
   const b = { ...raw, time: shift(raw.time) };
-  const last = bars[bars.length - 1];
+  const last = allBars[allBars.length - 1];
   if (last && b.time < last.time) return;
-  if (last && b.time === last.time) bars[bars.length - 1] = b; else bars.push(b);
+  if (last && b.time === last.time) allBars[allBars.length - 1] = b; else allBars.push(b);
+  if (replayIdx != null) return; // live updates wait until replay ends
+  bars = allBars;
   candles.update({ ...b, time: b.time as UTCTimestamp });
   volume.update(volBar(b));
   computeIndicators();
@@ -136,7 +141,7 @@ function updateBar(raw: Bar) {
 }
 
 // ---------- legend (header with name, status and OHLC) ----------
-const fmt = (v: number) => (Math.abs(v) >= 1 ? v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : v.toPrecision(4));
+const fmt = (v: number) => (Math.abs(v) >= 0.1 || v === 0 ? v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : v.toPrecision(4));
 function renderLegend(param?: MouseEventParams) {
   const lg = el('legend');
   let b = bars[bars.length - 1];
@@ -209,7 +214,9 @@ function subscribe() {
   clearNotice();
   loading = true;
   label = '';
+  stopReplay(false);
   bars = [];
+  allBars = [];
   drawings.clear();
   candles.setData([]);
   volume.setData([]);
@@ -309,6 +316,79 @@ el('full-btn').onclick = () => {
   if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen();
 };
 
+// ---------- bar replay ----------
+const replayBar = el('replay-bar');
+let replaySelecting = false;
+let replayTimer = 0;
+let replaySpeed = 1000;
+function redrawReplay() {
+  bars = replayIdx == null ? allBars : allBars.slice(0, replayIdx + 1);
+  candles.setData(bars.map((b) => ({ ...b, time: b.time as UTCTimestamp })));
+  volume.setData(bars.map(volBar));
+  computeIndicators();
+  renderLegend();
+}
+function replayStep() {
+  if (replayIdx == null) return;
+  if (replayIdx >= allBars.length - 1) { pauseReplay(); notice('Replay reached the latest bar.'); return; }
+  replayIdx += 1;
+  const b = allBars[replayIdx];
+  bars = allBars.slice(0, replayIdx + 1);
+  candles.update({ ...b, time: b.time as UTCTimestamp });
+  volume.update(volBar(b));
+  computeIndicators();
+  renderLegend();
+}
+function pauseReplay() { clearInterval(replayTimer); replayTimer = 0; el('rp-play').innerHTML = icon('play', 18); }
+function playReplay() {
+  if (replayTimer) { pauseReplay(); return; }
+  replayTimer = window.setInterval(replayStep, replaySpeed);
+  el('rp-play').innerHTML = icon('pause', 18);
+}
+function startReplaySelect() {
+  if (!allBars.length) return;
+  replaySelecting = true;
+  replayBar.hidden = false;
+  el('replay-btn').classList.add('active');
+  el('rp-hint').textContent = 'Click a bar to start replay from there';
+  el('chart-wrap').classList.add('drawing');
+}
+function stopReplay(redraw = true) {
+  pauseReplay();
+  const was = replayIdx != null || replaySelecting;
+  replayIdx = null;
+  replaySelecting = false;
+  replayBar.hidden = true;
+  el('replay-btn').classList.remove('active');
+  el('chart-wrap').classList.remove('drawing');
+  if (was && redraw) { redrawReplay(); chart.timeScale().scrollToRealTime(); }
+}
+chart.subscribeClick((p) => {
+  if (!replaySelecting || p.time === undefined) return;
+  const i = allBars.findIndex((b) => b.time === p.time);
+  if (i < 0) return;
+  replaySelecting = false;
+  replayIdx = i;
+  el('chart-wrap').classList.remove('drawing');
+  el('rp-hint').textContent = '';
+  redrawReplay();
+});
+el('replay-btn').onclick = () => (replayIdx != null || replaySelecting ? stopReplay() : startReplaySelect());
+el('rp-play').onclick = () => { if (replayIdx != null) playReplay(); };
+el('rp-step').onclick = () => { pauseReplay(); replayStep(); };
+el('rp-select').onclick = () => { pauseReplay(); startReplaySelect(); };
+el('rp-exit').onclick = () => stopReplay();
+el<HTMLSelectElement>('rp-speed').onchange = (e) => {
+  replaySpeed = Number((e.target as HTMLSelectElement).value);
+  if (replayTimer) { pauseReplay(); playReplay(); }
+};
+window.addEventListener('keydown', (e) => {
+  if (replayIdx == null || document.activeElement instanceof HTMLInputElement) return;
+  if (e.shiftKey && e.key === 'ArrowRight') { e.preventDefault(); pauseReplay(); replayStep(); }
+});
+el('rp-play').innerHTML = icon('play', 18);
+el('rp-step').innerHTML = icon('step', 18);
+
 // ---------- right rail toggles ----------
 function railToggle(btnId: string, panelId: string, store: string, dflt = true) {
   const btn = el(btnId), panel = el(panelId);
@@ -328,7 +408,7 @@ railToggle('rail-al', 'alerts', 'showAlerts', false);
 
 // ---------- symbol search + watchlist ----------
 function choose(k: string) { key = k; details = null; subscribe(); watchlist.setActive(key); alerts.refreshLines(); }
-const alerts = initAlerts({ getKey: () => key, getLast: () => bars[bars.length - 1]?.close ?? null, candles, onPick: (k) => choose(k) });
+const alerts = initAlerts({ getKey: () => key, getLast: () => allBars[allBars.length - 1]?.close ?? null, candles, onPick: (k) => choose(k) });
 attachSearch(el<HTMLInputElement>('symbol'), el<HTMLUListElement>('results'), choose);
 const watchlist = initWatchlist(choose, (d) => { if (d.key === key) { details = d; renderLegend(); } });
 watchlist.setActive(key);

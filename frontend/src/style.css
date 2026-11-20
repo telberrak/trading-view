@@ -178,3 +178,14 @@ dialog input:focus, dialog select:focus { outline: none; border-color: var(--acc
 .dlg-btns button { padding: 7px 14px; border: 1px solid var(--border); }
 .dlg-btns .primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 .err { color: var(--red); font-size: 12px; min-height: 16px; }
+
+/* ---------- replay ---------- */
+#replay-bar { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 5; display: flex; align-items: center; gap: 4px;
+  background: #1e1e1e; border: 1px solid var(--border); border-radius: 8px; padding: 4px 6px; box-shadow: 0 8px 24px rgba(0,0,0,.6); }
+#replay-bar[hidden] { display: none; }
+#replay-bar button { padding: 5px 8px; display: inline-flex; align-items: center; }
+#replay-bar button:hover { background: var(--hover); }
+#replay-bar select { background: #111; color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 3px; font: inherit; }
+#rp-hint { color: #f7a600; padding: 0 6px; font-size: 12px; }
+#rp-hint:empty { display: none; }
+.tbtn.active { color: var(--accent); }
