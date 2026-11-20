@@ -17,6 +17,7 @@ import { avatar, icon } from './icons';
 import { type Bar } from './indicators';
 import type { ISeriesApi } from 'lightweight-charts';
 import { initStudies } from './studies';
+import { initTrading } from './trading';
 import { attachSearch, shortName } from './search';
 import { initWatchlist, type Details } from './watchlist';
 import './style.css';
@@ -402,7 +403,7 @@ function railToggle(btnId: string, panelId: string, store: string, dflt = true) 
   const apply = (on: boolean) => {
     btn.classList.toggle('active', on);
     panel.classList.toggle('hidden', !on);
-    const anyOn = ['watchlist', 'details', 'alerts'].some((id) => !el(id).classList.contains('hidden'));
+    const anyOn = ['watchlist', 'details', 'trading', 'alerts'].some((id) => !el(id).classList.contains('hidden'));
     el('side').classList.toggle('hidden', !anyOn);
   };
   let on = load(store, dflt);
@@ -411,11 +412,13 @@ function railToggle(btnId: string, panelId: string, store: string, dflt = true) 
 }
 railToggle('rail-wl', 'watchlist', 'showWatchlist');
 railToggle('rail-det', 'details', 'showDetails');
+railToggle('rail-tr', 'trading', 'showTrading', false);
 railToggle('rail-al', 'alerts', 'showAlerts', false);
 
 // ---------- symbol search + watchlist ----------
-function choose(k: string) { key = k; details = null; subscribe(); watchlist.setActive(key); alerts.refreshLines(); }
+function choose(k: string) { key = k; details = null; subscribe(); watchlist.setActive(key); alerts.refreshLines(); trading.symbolChanged(); }
 const alerts = initAlerts({ getKey: () => key, getLast: () => allBars[allBars.length - 1]?.close ?? null, candles, onPick: (k) => choose(k) });
+const trading = initTrading({ getKey: () => key, getLast: () => allBars[allBars.length - 1]?.close ?? null, candles, onPick: (k) => choose(k) });
 attachSearch(el<HTMLInputElement>('symbol'), el<HTMLUListElement>('results'), choose);
 const watchlist = initWatchlist(choose, (d) => { if (d.key === key) { details = d; renderLegend(); } });
 watchlist.setActive(key);

@@ -17,6 +17,7 @@ from .details import details as symbol_details
 from .quotes import QuoteSession
 from .alerts import AlertEngine
 from .streams import TIMEFRAMES, ChartStream
+from .trading import Trading
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("app")
@@ -39,6 +40,7 @@ def broadcast(msg: dict):
 
 
 alerts = AlertEngine(ib, broadcast)
+trading = Trading(ib, broadcast)
 
 
 def _on_error(req_id, code, msg, *_):
@@ -56,9 +58,13 @@ def _on_error(req_id, code, msg, *_):
 async def connect():
     for port in PORTS:
         try:
-            await ib.connectAsync(HOST, port, clientId=CLIENT_ID, readonly=True, timeout=5)
+            await ib.connectAsync(HOST, port, clientId=CLIENT_ID, readonly=False, timeout=5)
             ib.reqMarketDataType(3)  # live where subscribed, delayed otherwise
             state.update(port=port, error=None)
+            try:
+                await asyncio.wait_for(ib.reqAllOpenOrdersAsync(), 10)  # include orders placed in TWS itself
+            except Exception:  # noqa: BLE001
+                log.warning("Could not load open orders")
             log.info("Connected to IBKR on %s:%s", HOST, port)
             return
         except Exception as e:  # noqa: BLE001
@@ -78,6 +84,7 @@ async def keep_connected():
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     ib.errorEvent += _on_error
+    trading.attach()
     tasks = [asyncio.create_task(keep_connected()), asyncio.create_task(alerts.run())]
     yield
     for t in tasks:
@@ -184,6 +191,28 @@ async def update_alert(alert_id: str, body: dict = Body(...)):
 async def delete_alert(alert_id: str):
     alerts.delete(alert_id)
     broadcast({"type": "alerts", "alerts": alerts.list()})
+    return {"ok": True}
+
+
+@app.get("/api/account")
+async def get_account():
+    return {**trading.account(), "orders": trading.orders(), "positions": trading.positions(), "fills": trading.fills()}
+
+
+@app.post("/api/orders")
+async def place_order(body: dict = Body(...)):
+    if body.get("confirmed") is not True:
+        return JSONResponse({"error": "Order must be confirmed"}, status_code=400)
+    try:
+        return await trading.place(body)
+    except (KeyError, ValueError, TypeError) as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@app.delete("/api/orders/{order_id}")
+async def cancel_order(order_id: int):
+    if not trading.cancel(order_id):
+        return JSONResponse({"error": "Order not found or already done"}, status_code=404)
     return {"ok": True}
 
 

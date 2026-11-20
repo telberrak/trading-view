@@ -36,6 +36,7 @@ const P: Record<string, string> = {
   'ct-bars': '<path d="M8 4v16M5 8h3M8 16h3M16 6v12M13 15h3M16 9h3"/>',
   'ct-line': '<path d="M3 17l5-6 4 3 5-7 4 4"/>',
   'ct-area': '<path d="M3 17l5-6 4 3 5-7 4 4v8H3z" fill="currentColor" fill-opacity=".25"/><path d="M3 17l5-6 4 3 5-7 4 4"/>',
+  wallet: '<rect x="3" y="6" width="18" height="14" rx="2"/><path d="M3 10h18M16 15h2M6 6l9-3 1 3"/>',
   calendar: '<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>',
 };
 

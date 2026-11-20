@@ -7,7 +7,7 @@ Personal TradingView-style charts on live IBKR data. See PLAN.md for the roadmap
 Needs Python 3.10+ and Node.js 18+ (macOS: `brew install python node`).
 
 1. In TWS: Global Configuration > API > Settings (File menu on Windows, TWS/Edit menu on macOS),
-   tick **Enable ActiveX and Socket Clients**. The app is read-only, so "Read-Only API" can stay ticked.
+   tick **Enable ActiveX and Socket Clients**. To place orders from the app, untick **Read-Only API** (otherwise orders are rejected with error 321).
    Add 127.0.0.1 to trusted IPs.
 2. Start it:
    - **Windows:** double-click `start.bat`
@@ -36,6 +36,14 @@ Force one with `set IB_PORT=7497` before `start.bat` (Windows) or `IB_PORT=7497 
 - Magnet snaps points to the nearest open/high/low/close. Lock stops drawings being selected or moved. The eye hides them; the bin removes all on this symbol.
 - Undo/redo: the arrows in the top bar, Cmd/Ctrl+Z and Shift+Cmd/Ctrl+Z (or Ctrl+Y).
 - Drawings are saved in the browser per symbol and stay put across timeframes.
+
+## Trading (live orders)
+
+- The SELL / BUY buttons at the top-left of the chart (or Shift+S / Shift+B) open an order ticket: market, limit, stop or stop-limit, DAY or GTC, and for stocks optional outside-hours.
+- "Review order" shows a confirmation with the account and a red LIVE ACCOUNT badge (blue PAPER when TWS is logged into paper). Nothing is sent until you press "Send BUY/SELL order".
+- Orders go to the account TWS / IB Gateway is logged into. Futures trade the front-month contract shown in the chart title; crypto market orders are sent IOC (an IBKR rule).
+- The wallet icon on the right rail opens positions, working orders (× cancels) and today's fills. Positions and working orders also show as lines on the chart.
+- If TWS shows its own order-precaution pop-ups, they still need clicking in TWS (or turn them off under API > Precautions).
 
 ## Bar replay
 
