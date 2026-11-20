@@ -25,6 +25,16 @@ Force one with `set IB_PORT=7497` before `start.bat` (Windows) or `IB_PORT=7497 
 - Timeframes: 1m 5m 15m 1h 1D 1W 1M. Intraday times are shown in your local time.
 - Indicators: click EMA 9 / EMA 21 / VWAP to toggle; double-click an EMA to change its period. VWAP shows on intraday charts only.
 
+## Watchlist
+
+- Lists on the right with live last price, change and % change (vs. previous close). Starter lists: Stocks, Futures, Crypto.
+- Click a row to chart it; Up/Down arrow keys step through the list. Drag rows to reorder, hover and click × to remove.
+- "Add symbol" searches IBKR. `+` makes a new list, Rename/Delete manage the current one.
+- **Import** takes a TWS watchlist export (in TWS: right-click the watchlist tab > Export page content, or any .csv/.txt of tickers) and adds it as a new list.
+- Lists are saved in `backend/data/watchlists.json` (not committed).
+
+If a chart stays empty, a yellow note explains why (usually a missing market data subscription or, for crypto, missing crypto trading permission).
+
 ## Develop
 
 `npm run dev` in `frontend` (hot reload on :5173) with the server running on :8000.

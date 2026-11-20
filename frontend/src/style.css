@@ -29,14 +29,14 @@ button.active { color: var(--accent); }
 #symbol { width: 150px; background: var(--panel); color: var(--text); border: 1px solid transparent;
   border-radius: 4px; padding: 5px 8px; font: inherit; font-weight: 600; text-transform: uppercase; }
 #symbol:focus { outline: none; border-color: var(--accent); }
-#results { position: absolute; top: 32px; left: 0; z-index: 10; width: 380px; max-height: 420px;
+.results { position: absolute; top: 32px; left: 0; z-index: 10; width: 380px; max-height: 420px;
   overflow: auto; margin: 0; padding: 4px 0; list-style: none; background: var(--panel);
   border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.4); }
-#results li { display: flex; gap: 10px; padding: 7px 12px; cursor: pointer; align-items: baseline; }
-#results li:hover, #results li.sel { background: #2a2e39; }
-#results .sym { font-weight: 600; min-width: 70px; }
-#results .desc { color: var(--muted); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#results .kind { color: var(--muted); font-size: 11px; }
+.results li { display: flex; gap: 10px; padding: 7px 12px; cursor: pointer; align-items: baseline; }
+.results li:hover, .results li.sel { background: #2a2e39; }
+.results .sym { font-weight: 600; min-width: 70px; }
+.results .desc { color: var(--muted); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.results .kind { color: var(--muted); font-size: 11px; }
 
 main { flex: 1; display: flex; min-height: 0; }
 #chart-wrap { position: relative; flex: 1; min-width: 0; }
@@ -47,7 +47,32 @@ main { flex: 1; display: flex; min-height: 0; }
 #legend .ind { font-size: 12px; }
 #notice { position: absolute; bottom: 36px; left: 50%; transform: translateX(-50%); z-index: 4;
   background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 8px 14px;
-  color: #f7a600; max-width: 70%; }
-#watchlist { width: 300px; border-left: 4px solid var(--border); background: var(--bg); }
-.wl-head { padding: 10px 12px; font-weight: 600; border-bottom: 1px solid var(--border); }
-.wl-empty { padding: 16px 12px; color: var(--muted); }
+  color: #f7a600; max-width: 70%; cursor: pointer; }
+#watchlist { width: 330px; border-left: 4px solid var(--border); background: var(--bg); }
+#watchlist { display: flex; flex-direction: column; min-height: 0; }
+.wl-head { display: flex; align-items: center; gap: 2px; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.wl-head button { padding: 4px 6px; color: var(--muted); font-size: 12px; }
+.wl-head button:hover { color: var(--text); }
+#wl-select { flex: 1; min-width: 0; background: var(--bg); color: var(--text); border: 0; font: inherit;
+  font-weight: 600; padding: 4px 2px; cursor: pointer; }
+.wl-search { padding: 6px 8px; }
+#wl-add { width: 100%; background: var(--panel); color: var(--text); border: 1px solid transparent;
+  border-radius: 4px; padding: 5px 8px; font: inherit; text-transform: uppercase; }
+#wl-add:focus { outline: none; border-color: var(--accent); }
+.wl-search .results { left: 8px; width: 314px; top: 36px; }
+.wl-cols, .wl-row { display: grid; grid-template-columns: minmax(56px, 1fr) 72px 56px 62px 14px; align-items: center;
+  gap: 4px; padding: 0 8px 0 12px; }
+.wl-cols { color: var(--muted); font-size: 11px; height: 26px; border-bottom: 1px solid var(--border); }
+#wl-rows { flex: 1; overflow-y: auto; }
+.wl-row { height: 32px; cursor: pointer; border-left: 2px solid transparent; }
+.wl-row:hover { background: var(--panel); }
+.wl-row.active { background: #1e2433; border-left-color: var(--accent); }
+.wl-row .s { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.n { text-align: right; font-variant-numeric: tabular-nums; }
+.up { color: var(--up); } .down { color: var(--down); }
+.wl-row .x { visibility: hidden; padding: 0; color: var(--muted); font-size: 15px; }
+.wl-row:hover .x { visibility: visible; }
+.wl-row .x:hover { color: var(--text); background: transparent; }
+@keyframes fu { from { background: rgba(8,153,129,.35); } to { background: transparent; } }
+@keyframes fd { from { background: rgba(242,54,69,.35); } to { background: transparent; } }
+.flash-up { animation: fu .8s ease-out; } .flash-down { animation: fd .8s ease-out; }

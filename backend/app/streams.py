@@ -51,27 +51,40 @@ class ChartStream:
 
     async def start(self):
         size, duration, _ = TIMEFRAMES[self.tf]
-        keep = self.r.sec_type != "FUT"
-        bars = await self._history(size, duration, keep)
-        if keep and not bars:  # keepUpToDate refused: fall back to real-time bars
-            keep = False
-            bars = await self._history(size, duration, False)
+        # (whatToShow, keepUpToDate) attempts, best first. Futures stream live via real-time bars.
+        if self.r.sec_type == "FUT":
+            attempts = [(self.r.what_to_show, False)]
+        elif self.r.sec_type == "CRYPTO":
+            attempts = [("AGGTRADES", True), ("AGGTRADES", False), ("MIDPOINT", False)]
+        else:
+            attempts = [(self.r.what_to_show, True), (self.r.what_to_show, False)]
+        bars, keep = [], False
+        for what, keep in attempts:
+            bars = await self._history(size, duration, what, keep)
+            if bars:
+                break
         data = [bar_dict(b) for b in bars or []]
         self.current = dict(data[-1]) if data else None
         self.queue.put_nowait({"type": "history", "key": self.r.key, "tf": self.tf,
                                "label": self.r.label, "bars": data})
+        if not data:
+            return
         if keep:
             bars.updateEvent += self._on_hist_update
         else:
-            self.rt = self.ib.reqRealTimeBars(self.r.live, 5, "TRADES", False)
+            self.rt = self.ib.reqRealTimeBars(self.r.live, 5, "TRADES" if self.r.sec_type != "CRYPTO" else "MIDPOINT", False)
             self.rt.updateEvent += self._on_rt_update
 
-    async def _history(self, size: str, duration: str, keep: bool):
-        self.hist = await self.ib.reqHistoricalDataAsync(
-            self.r.history, endDateTime="", durationStr=duration, barSizeSetting=size,
-            whatToShow=self.r.what_to_show, useRTH=self.r.use_rth, formatDate=2,
-            keepUpToDate=keep, timeout=60)
-        return self.hist
+    async def _history(self, size: str, duration: str, what: str, keep: bool):
+        try:
+            self.hist = await asyncio.wait_for(self.ib.reqHistoricalDataAsync(
+                self.r.history, endDateTime="", durationStr=duration, barSizeSetting=size,
+                whatToShow=what, useRTH=self.r.use_rth, formatDate=2,
+                keepUpToDate=keep, timeout=20), 25)
+        except asyncio.TimeoutError:
+            log.warning("history timeout %s %s %s", self.r.key, what, keep)
+            self.hist = None
+        return self.hist or []
 
     def _on_hist_update(self, bars: BarDataList, has_new_bar: bool):
         if has_new_bar and len(bars) > 1:

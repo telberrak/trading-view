@@ -7,12 +7,13 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import Body, FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from ib_async import IB
 
-from . import contracts
+from . import contracts, watchlists
+from .quotes import QuoteSession
 from .streams import TIMEFRAMES, ChartStream
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -126,6 +127,53 @@ async def chart_ws(ws: WebSocket):
             stream.stop()
         listeners.discard(queue)
         send_task.cancel()
+
+
+@app.get("/api/watchlists")
+async def get_watchlists():
+    return watchlists.load()
+
+
+@app.put("/api/watchlists")
+async def put_watchlists(data: dict = Body(...)):
+    return watchlists.save(data)
+
+
+@app.post("/api/watchlists/import")
+async def import_watchlist(payload: dict = Body(...)):
+    """Body: {"name": "My list", "text": "<TWS export or tickers>"} -> adds a new list."""
+    keys = watchlists.parse_tws_export(payload.get("text", ""))
+    if not keys:
+        return JSONResponse({"error": "No symbols found in that file"}, status_code=400)
+    data = watchlists.load()
+    data["lists"].append({"name": payload.get("name") or "Imported", "symbols": keys})
+    data["active"] = len(data["lists"]) - 1
+    return watchlists.save(data)
+
+
+@app.websocket("/ws/quotes")
+async def quotes_ws(ws: WebSocket):
+    """Client sends {"type":"symbols","keys":[...]}; server pushes {"type":"quotes","data":{key: quote}}."""
+    await ws.accept()
+    queue: asyncio.Queue = asyncio.Queue()
+    session = QuoteSession(ib, queue)
+
+    async def sender():
+        while True:
+            await ws.send_json(await queue.get())
+
+    tasks = [asyncio.create_task(sender()), asyncio.create_task(session.run())]
+    try:
+        while True:
+            msg = await ws.receive_json()
+            if msg.get("type") == "symbols" and ib.isConnected():
+                await session.set_symbols([str(k).upper() for k in msg.get("keys", [])])
+    except WebSocketDisconnect:
+        pass
+    finally:
+        session.stop()
+        for t in tasks:
+            t.cancel()
 
 
 # Serve the built front end (frontend/dist) at /

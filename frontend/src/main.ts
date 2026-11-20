@@ -10,6 +10,8 @@ import {
   type UTCTimestamp,
 } from 'lightweight-charts';
 import { ema, vwap, type Bar, type Point } from './indicators';
+import { attachSearch, shortName } from './search';
+import { initWatchlist } from './watchlist';
 import './style.css';
 
 const TIMEFRAMES = ['1m', '5m', '15m', '1h', '1D', '1W', '1M'] as const;
@@ -55,6 +57,7 @@ const lines = new Map<string, ISeriesApi<'Line'>>();
 const lineData = new Map<string, Point[]>();
 let bars: Bar[] = [];
 let label = '';
+let loading = false;
 
 // IBKR sends UTC; shift intraday bars so the axis shows your local time.
 const shift = (t: number) => (INTRADAY.has(tf) ? t - new Date(t * 1000).getTimezoneOffset() * 60 : t);
@@ -102,7 +105,11 @@ const fmt = (v: number) => (Math.abs(v) >= 1000 ? v.toFixed(2) : v >= 1 ? v.toFi
 function renderLegend(param?: MouseEventParams) {
   let b = bars[bars.length - 1];
   if (param?.time !== undefined) b = bars.find((x) => x.time === param.time) ?? b;
-  if (!b) { el('legend').innerHTML = `<span class="title">${label || key}</span>`; return; }
+  if (!b) {
+    el('legend').innerHTML = `<span class="title"></span><span class="ind">${loading ? 'Loading from IBKR…' : ''}</span>`;
+    el('legend').querySelector('.title')!.textContent = `${label || shortName(key)} · ${tf}`;
+    return;
+  }
   const i = bars.indexOf(b);
   const prev = i > 0 ? bars[i - 1].close : b.open;
   const chg = b.close - prev;
@@ -121,14 +128,18 @@ function renderLegend(param?: MouseEventParams) {
 chart.subscribeCrosshairMove(renderLegend);
 
 // ---------- notices ----------
-let noticeTimer = 0;
+// Notices stay up until the next symbol/timeframe change or a click.
 function notice(msg: string) {
   const n = el('notice');
-  n.textContent = msg;
+  if (n.hidden) n.textContent = '';
+  const line = document.createElement('div');
+  line.textContent = msg;
+  n.appendChild(line);
+  while (n.childElementCount > 4) n.firstElementChild!.remove();
   n.hidden = false;
-  clearTimeout(noticeTimer);
-  noticeTimer = window.setTimeout(() => (n.hidden = true), 8000);
 }
+function clearNotice() { const n = el('notice'); n.hidden = true; n.textContent = ''; }
+el('notice').onclick = clearNotice;
 
 // ---------- socket ----------
 let ws: WebSocket | null = null;
@@ -140,7 +151,13 @@ function connect() {
     if (m.type === 'history') {
       if (m.key !== key || m.tf !== tf) return;
       label = m.label;
-      if (!m.bars.length) notice('No data returned. Check your IBKR market data subscription for this symbol.');
+      loading = false;
+      if (!m.bars.length) {
+        const crypto = key.startsWith('CRYPTO');
+        notice(`IBKR returned no data for ${shortName(key)} on ${tf}. ` + (crypto
+          ? 'Crypto needs crypto trading permission on your IBKR account (Client Portal > Settings > Trading Permissions > Cryptocurrency).'
+          : 'Check your IBKR market data subscription for this exchange.'));
+      }
       setHistory(m.bars);
     } else if (m.type === 'bar') updateBar(m.bar);
     else if (m.type === 'notice') notice(m.code ? `IBKR ${m.code}: ${m.message}` : m.message);
@@ -148,6 +165,8 @@ function connect() {
   ws.onclose = () => setTimeout(connect, 2000);
 }
 function subscribe() {
+  clearNotice();
+  loading = true;
   save('key', key);
   save('tf', tf);
   label = '';
@@ -156,7 +175,7 @@ function subscribe() {
   volume.setData([]);
   computeIndicators();
   renderLegend();
-  el<HTMLInputElement>('symbol').value = key.split(':').length > 1 ? key.split(':')[1] : key;
+  el<HTMLInputElement>('symbol').value = shortName(key);
   if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'subscribe', key, tf }));
 }
 function el<T extends HTMLElement = HTMLElement>(id: string): T { return document.getElementById(id) as T; }
@@ -195,57 +214,24 @@ renderInds();
 
 // ---------- symbol search ----------
 const input = el<HTMLInputElement>('symbol');
-const results = el<HTMLUListElement>('results');
-let searchTimer = 0;
-let items: { key: string; symbol: string; description: string; type: string }[] = [];
-let sel = 0;
-function choose(k: string) { key = k; results.hidden = true; input.blur(); subscribe(); }
-function renderResults() {
-  results.innerHTML = '';
-  items.forEach((it, i) => {
-    const li = document.createElement('li');
-    li.className = i === sel ? 'sel' : '';
-    li.innerHTML = `<span class="sym">${it.symbol}</span><span class="desc">${it.description}</span><span class="kind">${it.type}</span>`;
-    li.onmousedown = () => choose(it.key);
-    results.appendChild(li);
-  });
-  results.hidden = items.length === 0;
-}
-input.addEventListener('focus', () => input.select());
-input.addEventListener('blur', () => setTimeout(() => (results.hidden = true), 150));
-input.addEventListener('input', () => {
-  clearTimeout(searchTimer);
-  const q = input.value.trim();
-  if (!q || q.includes(':')) { items = []; renderResults(); return; }
-  searchTimer = window.setTimeout(async () => {
-    try {
-      const r = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
-      items = r.ok ? await r.json() : [];
-    } catch { items = []; }
-    sel = 0;
-    renderResults();
-  }, 250);
-});
-input.addEventListener('keydown', (e) => {
-  if (e.key === 'ArrowDown') { sel = Math.min(sel + 1, items.length - 1); renderResults(); e.preventDefault(); }
-  else if (e.key === 'ArrowUp') { sel = Math.max(sel - 1, 0); renderResults(); e.preventDefault(); }
-  else if (e.key === 'Enter') {
-    const q = input.value.trim().toUpperCase();
-    // Typed keys like FUT:ES:CME or CRYPTO:BTC win; otherwise take the highlighted result.
-    choose(q.includes(':') || !items.length ? q : items[sel].key);
-  } else if (e.key === 'Escape') { results.hidden = true; input.blur(); }
-});
+function choose(k: string) { key = k; subscribe(); watchlist.setActive(key); }
+attachSearch(input, el<HTMLUListElement>('results'), choose);
+const watchlist = initWatchlist(choose);
+watchlist.setActive(key);
 // TradingView habit: start typing anywhere to search
 window.addEventListener('keydown', (e) => {
-  if (document.activeElement === input || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (document.activeElement instanceof HTMLInputElement || e.ctrlKey || e.metaKey || e.altKey) return;
   if (/^[a-zA-Z]$/.test(e.key)) { input.focus(); input.value = ''; }
 });
 
 // ---------- connection status ----------
+let wasConnected: boolean | null = null;
 async function pollStatus() {
   try {
     const s = await (await fetch('/api/status')).json();
     const c = el('conn');
+    if (s.connected && wasConnected === false) { watchlist.resubscribe(); subscribe(); } // IBKR came back
+    wasConnected = s.connected;
     c.classList.toggle('ok', s.connected);
     c.title = s.connected ? `Connected to IBKR on port ${s.port}` : `Not connected to TWS / IB Gateway (${s.error ?? ''})`;
   } catch { el('conn').classList.remove('ok'); }

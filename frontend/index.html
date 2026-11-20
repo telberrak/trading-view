@@ -9,7 +9,7 @@
     <header id="toolbar">
       <div class="search">
         <input id="symbol" autocomplete="off" spellcheck="false" placeholder="Symbol" />
-        <ul id="results" hidden></ul>
+        <ul id="results" class="results" hidden></ul>
       </div>
       <div class="sep"></div>
       <div id="timeframes" class="group"></div>
@@ -25,8 +25,20 @@
         <div id="notice" hidden></div>
       </section>
       <aside id="watchlist">
-        <div class="wl-head">Watchlist</div>
-        <div class="wl-empty">Watchlist with live prices and IBKR sync arrives in Phase 2.</div>
+        <div class="wl-head">
+          <select id="wl-select" title="Watchlists"></select>
+          <button id="wl-new" title="New list">+</button>
+          <button id="wl-rename" title="Rename list">Rename</button>
+          <button id="wl-delete" title="Delete list">Delete</button>
+          <button id="wl-import" title="Import a TWS watchlist export (.csv/.txt)">Import</button>
+          <input id="wl-file" type="file" accept=".csv,.txt" hidden />
+        </div>
+        <div class="search wl-search">
+          <input id="wl-add" autocomplete="off" spellcheck="false" placeholder="Add symbol" />
+          <ul id="wl-results" class="results" hidden></ul>
+        </div>
+        <div class="wl-cols"><span>Symbol</span><span class="n">Last</span><span class="n">Chg</span><span class="n">Chg%</span><span></span></div>
+        <div id="wl-rows"></div>
       </aside>
     </main>
     <script type="module" src="/src/main.ts"></script>
