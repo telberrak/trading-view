@@ -31,6 +31,10 @@
       <button id="redo-btn" class="tbtn icon-only" title="Redo (Shift+Cmd/Ctrl+Z)"><span class="ico" data-icon="redo"></span></button>
       <div class="spacer"></div>
       <span id="conn" class="conn" title="IBKR connection"></span>
+      <div class="menu-wrap">
+        <button id="layout-btn" class="tbtn icon-only" title="Chart layout"></button>
+        <div id="layout-menu" class="menu right" hidden></div>
+      </div>
       <button id="settings-btn" class="tbtn icon-only" title="Chart settings: colours"><span class="ico" data-icon="gear"></span></button>
       <button id="shot-btn" class="tbtn icon-only" title="Save chart image"><span class="ico" data-icon="camera"></span></button>
       <button id="full-btn" class="tbtn icon-only" title="Full screen"><span class="ico" data-icon="full"></span></button>
@@ -46,7 +50,8 @@
         <button id="draw-clear" title="Remove drawings on this chart"><span class="ico" data-icon="trash"></span></button>
       </nav>
       <main id="center">
-        <section id="chart-wrap">
+        <div id="grid" class="l1">
+        <section id="chart-wrap" class="cell">
           <div id="legend"></div>
           <div id="chart"></div>
           <div id="notice" hidden></div>
@@ -60,6 +65,7 @@
             <button id="rp-exit" title="Back to real time">Exit replay</button>
           </div>
         </section>
+        </div>
         <footer id="rangebar">
           <div id="ranges" class="group"></div>
           <div class="spacer"></div>

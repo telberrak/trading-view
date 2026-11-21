@@ -122,9 +122,9 @@ const DEFAULT: StudyCfg[] = [
   { id: 'vwap', kind: 'vwap', params: [], color: '#e040fb', on: true },
 ];
 
-function loadCfg(): StudyCfg[] {
+function loadCfg(storeKey: string): StudyCfg[] {
   try {
-    const s = localStorage.getItem('studies');
+    const s = localStorage.getItem(storeKey);
     if (s) return JSON.parse(s);
     const old = localStorage.getItem('indicators'); // earlier format: {kind, period}
     if (old) return (JSON.parse(old) as { id: string; kind: Kind; period?: number; color: string; on: boolean }[])
@@ -135,10 +135,10 @@ function loadCfg(): StudyCfg[] {
 
 const fmt = (v: number) => (Math.abs(v) >= 0.1 || v === 0 ? v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : v.toPrecision(4));
 
-interface Ctx { chart: IChartApi; getBars: () => Bar[]; isIntraday: () => boolean; wrap: HTMLElement; onChange: () => void; custom: (items: CustomItem[]) => void }
+interface Ctx { chart: IChartApi; getBars: () => Bar[]; isIntraday: () => boolean; wrap: HTMLElement; onChange: () => void; custom: (items: CustomItem[]) => void; storeKey?: string }
 
-export function initStudies({ chart, getBars, isIntraday, wrap, onChange, custom }: Ctx) {
-  const cfgs = loadCfg();
+export function initStudies({ chart, getBars, isIntraday, wrap, onChange, custom, storeKey = 'studies' }: Ctx) {
+  const cfgs = loadCfg(storeKey);
   const built = new Map<string, { series: ISeriesApi<'Line' | 'Histogram'>[]; out: Output[]; pane: number }>();
   let builtSig = '';
   const legends: HTMLDivElement[] = [];
@@ -241,7 +241,7 @@ export function initStudies({ chart, getBars, isIntraday, wrap, onChange, custom
 
   // ---------- menu ----------
   function changed() {
-    try { localStorage.setItem('studies', JSON.stringify(cfgs)); } catch { /* ignore */ }
+    try { localStorage.setItem(storeKey, JSON.stringify(cfgs)); } catch { /* ignore */ }
     compute();
     onChange();
   }

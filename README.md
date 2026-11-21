@@ -102,6 +102,16 @@ From **Indicators**:
 
 Every line in these (and the other indicators) has its own tick box and colour in the settings dialog.
 
+## Multi-chart layouts
+
+The layout button (top right) switches between one chart, two side by side, two stacked and four
+(2 × 2). Each chart keeps its own symbol, interval, chart type and indicators. Click a chart to make it
+active (blue outline); the watchlist, alerts and positions send symbols to the active chart. Sync
+options in the same menu: symbol, interval and crosshair (on by default).
+
+Each extra chart is its own IBKR data stream (history plus live bars), and a footprint chart also uses
+a tick-by-tick slot, so four footprint charts may hit your IBKR limits.
+
 ## Bar replay
 
 Replay button > click the bar to start from. Then play/pause, step one bar (Shift+Right), pick a speed, choose a new start or exit.

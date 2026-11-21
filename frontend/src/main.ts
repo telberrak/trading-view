@@ -24,6 +24,8 @@ import { initSideLayout } from './layout';
 import { loadColors, openChartSettings, withAlpha, type ChartColors } from './settings';
 import { attachSearch, shortName } from './search';
 import { initWatchlist, type Details } from './watchlist';
+import { initMultiChart } from './multichart';
+import { CHART_ID, EMBED, PREFIX, listen, post, syncOpts } from './sync';
 import './style.css';
 
 const TIMEFRAMES = ['1m', '5m', '15m', '30m', '1h', '2h', '4h', '1D', '1W', '1M'] as const;
@@ -40,10 +42,14 @@ const RANGES: [string, TF, number][] = [
 
 
 // ---------- persisted settings ----------
+// symbol, timeframe and chart type are kept per chart in a multi-chart layout
+const PER_CHART = new Set(['key', 'tf', 'chartType']);
+const pk = (k: string) => (PER_CHART.has(k) ? PREFIX + k : k);
 function load<T>(k: string, d: T): T {
-  try { const v = localStorage.getItem(k); return v ? (JSON.parse(v) as T) : d; } catch { return d; }
+  try { const v = localStorage.getItem(pk(k)); return v ? (JSON.parse(v) as T) : d; } catch { return d; }
 }
-function save(k: string, v: unknown) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* ignore */ } }
+function save(k: string, v: unknown) { try { localStorage.setItem(pk(k), JSON.stringify(v)); } catch { /* ignore */ } }
+if (EMBED) document.body.classList.add('embed');
 function el<T extends HTMLElement = HTMLElement>(id: string): T { return document.getElementById(id) as T; }
 document.querySelectorAll<HTMLElement>('[data-icon]').forEach((n) => (n.innerHTML = icon(n.dataset.icon!)));
 
@@ -147,7 +153,7 @@ const volBar = (b: Bar) => ({ time: b.time as UTCTimestamp, value: b.volume,
 
 let profiles: ReturnType<typeof initProfiles> | null = null;
 const studies = initStudies({ chart, getBars: () => bars, isIntraday: () => INTRADAY.has(tf), wrap: el('chart-wrap'),
-  onChange: () => { renderLegend(); syncFlow(); }, custom: (items) => profiles?.set(items) });
+  onChange: () => { renderLegend(); syncFlow(); }, custom: (items) => profiles?.set(items), storeKey: `${PREFIX}studies` });
 function computeIndicators() { studies.compute(); }
 
 // ---------- footprint / order flow ----------
@@ -326,7 +332,10 @@ for (const t of TIMEFRAMES) {
   b.onclick = () => setTf(t);
   tfBox.appendChild(b);
 }
-function setTf(t: TF) { tf = t; renderTfs(); subscribe(); }
+function setTf(t: TF, fromSync = false) {
+  tf = t; renderTfs(); subscribe();
+  if (!fromSync && syncOpts().interval) post({ type: 'tf', from: CHART_ID, tf: t });
+}
 function renderTfs() { [...tfBox.children].forEach((c, i) => c.classList.toggle('active', TIMEFRAMES[i] === tf)); }
 renderTfs();
 
@@ -467,8 +476,7 @@ window.addEventListener('keydown', (e) => {
 el('rp-play').innerHTML = icon('play', 18);
 el('rp-step').innerHTML = icon('step', 18);
 
-// ---------- right rail toggles ----------
-const sideLayout = initSideLayout();
+// ---------- right rail toggles (main page only) ----------
 function railToggle(btnId: string, panelId: string, store: string, dflt = true) {
   const btn = el(btnId), panel = el(panelId);
   const apply = (on: boolean) => {
@@ -476,28 +484,63 @@ function railToggle(btnId: string, panelId: string, store: string, dflt = true) 
     panel.classList.toggle('hidden', !on);
     const anyOn = ['watchlist', 'details', 'trading', 'alerts'].some((id) => !el(id).classList.contains('hidden'));
     el('side').classList.toggle('hidden', !anyOn);
-    sideLayout.layout();
+    sideLayout?.layout();
   };
   let on = load(store, dflt);
   apply(on);
   btn.onclick = () => { on = !on; save(store, on); apply(on); };
 }
-railToggle('rail-wl', 'watchlist', 'showWatchlist');
-railToggle('rail-det', 'details', 'showDetails');
-railToggle('rail-tr', 'trading', 'showTrading', false);
-railToggle('rail-al', 'alerts', 'showAlerts', false);
+const sideLayout = EMBED ? null : initSideLayout();
+if (!EMBED) {
+  railToggle('rail-wl', 'watchlist', 'showWatchlist');
+  railToggle('rail-det', 'details', 'showDetails');
+  railToggle('rail-tr', 'trading', 'showTrading', false);
+  railToggle('rail-al', 'alerts', 'showAlerts', false);
+}
 
 // ---------- symbol search + watchlist ----------
-function choose(k: string) { key = k; details = null; subscribe(); watchlist.setActive(key); alerts.refreshLines(); trading.symbolChanged(); }
-const alerts = initAlerts({ getKey: () => key, getLast: () => allBars[allBars.length - 1]?.close ?? null, candles, onPick: (k) => choose(k) });
-const trading = initTrading({ getKey: () => key, getLast: () => allBars[allBars.length - 1]?.close ?? null, candles, onPick: (k) => choose(k) });
-attachSearch(el<HTMLInputElement>('symbol'), el<HTMLUListElement>('results'), choose);
-const watchlist = initWatchlist(choose, (d) => { if (d.key === key) { details = d; renderLegend(); } });
-watchlist.setActive(key);
+/** Switch this chart's symbol. `fromSync`: the change came from another chart, so don't echo it back. */
+function choose(k: string, fromSync = false) {
+  key = k; details = null; subscribe(); watchlist?.setActive(key); alerts?.refreshLines(); trading?.symbolChanged();
+  if (!fromSync && syncOpts().symbol) post({ type: 'symbol', from: CHART_ID, key: k });
+}
+/** Symbols picked in the side panels go to whichever chart is active in the layout. */
+const pick = (k: string) => { if (!multi?.route(k)) choose(k); };
+const multi = EMBED ? null : initMultiChart(() => { sideLayout?.layout(); chart.timeScale().applyOptions({}); });
+const alerts = EMBED ? null : initAlerts({ getKey: () => key, getLast: () => allBars[allBars.length - 1]?.close ?? null, candles, onPick: pick });
+const trading = EMBED ? null : initTrading({ getKey: () => key, getLast: () => allBars[allBars.length - 1]?.close ?? null, candles, onPick: pick });
+attachSearch(el<HTMLInputElement>('symbol'), el<HTMLUListElement>('results'), (k) => choose(k));
+const watchlist = EMBED ? null : initWatchlist(pick, (d) => { if (d.key === key) { details = d; renderLegend(); } });
+watchlist?.setActive(key);
 // TradingView habit: start typing anywhere to search
 window.addEventListener('keydown', (e) => {
   if (document.activeElement instanceof HTMLInputElement || e.ctrlKey || e.metaKey || e.altKey) return;
   if (/^[a-zA-Z]$/.test(e.key)) { const i = el<HTMLInputElement>('symbol'); i.focus(); i.value = ''; }
+});
+
+// ---------- multi-chart sync ----------
+let hovering = false;
+el('chart-wrap').addEventListener('pointerenter', () => (hovering = true));
+el('chart-wrap').addEventListener('pointerleave', () => { hovering = false; if (syncOpts().crosshair) post({ type: 'xhair', from: CHART_ID, time: null }); });
+if (EMBED) window.addEventListener('pointerdown', () => post({ type: 'focus', from: CHART_ID }), true);
+const realTime = (t: number) => (INTRADAY.has(tf) ? t + new Date(t * 1000).getTimezoneOffset() * 60 : t);
+chart.subscribeCrosshairMove((p) => {
+  if (!hovering || !syncOpts().crosshair) return;
+  post({ type: 'xhair', from: CHART_ID, time: p.time === undefined ? null : realTime(p.time as number) });
+});
+listen((m) => {
+  if (m.type === 'symbol' && syncOpts().symbol && m.key !== key) choose(m.key, true);
+  else if (m.type === 'tf' && syncOpts().interval && m.tf !== tf && (TIMEFRAMES as readonly string[]).includes(m.tf)) setTf(m.tf as TF, true);
+  else if (m.type === 'setSymbol' && m.to === CHART_ID) choose(m.key);
+  else if (m.type === 'reload' && EMBED) location.reload();
+  else if (m.type === 'xhair' && !hovering && syncOpts().crosshair) {
+    if (m.time === null || !bars.length) { chart.clearCrosshairPosition(); return; }
+    const target = shift(m.time);
+    let lo = 0, hi = bars.length - 1;
+    if (target < bars[0].time) { chart.clearCrosshairPosition(); return; }
+    while (lo < hi) { const k = (lo + hi + 1) >> 1; if (bars[k].time <= target) lo = k; else hi = k - 1; }
+    chart.setCrosshairPosition(bars[lo].close, bars[lo].time as UTCTimestamp, candles);
+  }
 });
 
 // ---------- connection status ----------
@@ -506,7 +549,7 @@ async function pollStatus() {
   try {
     const s = await (await fetch('/api/status')).json();
     const c = el('conn');
-    if (s.connected && wasConnected === false) { watchlist.resubscribe(); subscribe(); } // IBKR came back
+    if (s.connected && wasConnected === false) { watchlist?.resubscribe(); subscribe(); } // IBKR came back
     wasConnected = s.connected;
     c.classList.toggle('ok', s.connected);
     c.title = s.connected ? `Connected to IBKR on port ${s.port}` : `Not connected to TWS / IB Gateway (${s.error ?? ''})`;
