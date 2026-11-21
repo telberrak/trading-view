@@ -53,7 +53,10 @@ your recent custom colours ("+" for any colour) and an opacity slider.
 The strip at the very top holds chart tabs, like TradingView's. Each tab is a whole layout (1, 2 or 4 charts with
 their symbols, intervals, chart types and indicators). "+" opens a new tab on the current symbol, click to switch,
 × to close, double-click to rename (unnamed tabs show their symbol and interval). Tabs are kept between sessions.
-Drawings belong to the symbol, so they show in every tab that has that symbol.
+Drawings work like TradingView's: each tab keeps its own. Select a drawing to choose where it shows from the
+bar at the top: "All charts in this tab" (default: every chart of that symbol in the tab), "This chart only", or
+"All tabs". Closing a tab removes its drawings, except those set to "All tabs". Drawings made before tabs
+existed belong to the first tab.
 
 ## Trading (live orders)
 

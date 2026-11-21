@@ -13,7 +13,7 @@ import {
   type UTCTimestamp,
 } from 'lightweight-charts';
 import { initAlerts } from './alerts';
-import { initDrawings, positionInfo } from './drawings';
+import { dropTabDrawings, initDrawings, positionInfo } from './drawings';
 import { avatar, icon } from './icons';
 import { type Bar } from './indicators';
 import type { ISeriesApi } from 'lightweight-charts';
@@ -609,12 +609,13 @@ multi?.addMenuSection((menu) => {
 });
 // ---------- chart tabs (main page): each tab is a whole layout, kept in localStorage ----------
 type Snap = ReturnType<typeof snapshotLayout>;
-interface Tabs { active: number; tabs: { name: string; snap: Snap | null }[] }
+interface Tabs { active: number; tabs: { id: string; name: string; snap: Snap | null }[] }
 function initTabs() {
   const strip = el('tabs');
-  const load = (): Tabs => { try { const t = JSON.parse(localStorage.getItem('chartTabs') || 'null'); if (t?.tabs?.length) return t; } catch { /* new */ } return { active: 0, tabs: [{ name: '', snap: null }] }; };
+  const load = (): Tabs => { try { const t = JSON.parse(localStorage.getItem('chartTabs') || 'null'); if (t?.tabs?.length) return t; } catch { /* new */ } return { active: 0, tabs: [{ id: 't0', name: '', snap: null }] }; };
   const st = load();
   st.active = Math.min(st.active, st.tabs.length - 1);
+  st.tabs.forEach((t, i) => { t.id ||= i === 0 ? 't0' : `t${Date.now().toString(36)}${i}`; });
   /** Unnamed tabs show their (first) chart's symbol and interval. */
   const auto = (i: number) => {
     if (i === st.active) return `${shortName(key)} · ${tf}`;
@@ -647,8 +648,10 @@ function initTabs() {
       const x = b.querySelector<HTMLElement>('.x');
       if (x) x.onclick = (e) => {
         e.stopPropagation();
+        if (!window.confirm(`Close "${t.name || auto(i)}"? Its drawings go with it (drawings set to "All tabs" stay).`)) return;
         const wasActive = i === st.active;
         if (!wasActive) st.tabs[st.active].snap = snapshotLayout();
+        dropTabDrawings(st.tabs[i].id);
         st.tabs.splice(i, 1);
         if (wasActive) { st.active = Math.max(0, i - 1); save(); const s2 = st.tabs[st.active].snap; if (s2) open(s2); else location.reload(); return; }
         if (i < st.active) st.active--;
@@ -665,7 +668,7 @@ function initTabs() {
       const cur = st.tabs[st.active].snap!;
       // a new tab starts as one chart on the current symbol and interval, with the same indicators
       const snap: Snap = { layout: '1', sync: cur.sync, charts: [{ ...cur.charts[0] }] };
-      st.tabs.push({ name: '', snap });
+      st.tabs.push({ id: `t${Date.now().toString(36)}`, name: '', snap });
       st.active = st.tabs.length - 1;
       save();
       open(snap);

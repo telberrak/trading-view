@@ -1,6 +1,7 @@
 import type { IChartApi, ISeriesApi, Logical } from 'lightweight-charts';
 import type { Bar } from './indicators';
 import type { ColorSwatch } from './colorpick';
+import { CHART_ID } from './sync';
 
 /**
  * Drawing tools rendered on an SVG layer over the price pane. Points are stored as (time, price), so
@@ -10,7 +11,12 @@ import type { ColorSwatch } from './colorpick';
 interface Pt { t: number; p: number }
 /** A long/short position drawing turned into an order: entry, take-profit target and stop. */
 export interface PositionOrder { long: boolean; entry: number; target: number; stop: number; type: 'MKT' | 'LMT' }
-interface Drawing { id: string; kind: string; pts: Pt[]; text?: string; color: string; width?: number }
+/**
+ * Sync, as in TradingView: 'none' = only the chart it was drawn on, 'layout' = every chart of that symbol in
+ * the same tab (default), 'global' = every tab. `tab` and `chart` record where it was drawn.
+ */
+type Sync = 'none' | 'layout' | 'global';
+interface Drawing { id: string; kind: string; pts: Pt[]; text?: string; color: string; width?: number; sync?: Sync; tab?: string; chart?: number }
 
 /** What a tool's draw function gets: screen coordinates of its points plus small SVG helpers. */
 interface R {
@@ -480,8 +486,15 @@ export function initDrawings({ chart, candles, getBars, wrap }: Ctx) {
   const storeKey = () => `drawings:${key}`;
   function load() {
     try { items = JSON.parse(localStorage.getItem(storeKey()) || '[]'); } catch { items = []; }
+    // drawings from before tabs existed belong to the first tab
+    let first = '';
+    for (const d of items) if (!d.sync) { first ||= firstTabId(); d.sync = 'layout'; d.tab = first; d.chart = 0; }
   }
+  /** Drawings of this symbol that show on this chart. */
+  const mine = (d: Drawing) => d.sync === 'global' || (d.tab === tabId() && (d.sync !== 'none' || d.chart === CHART_ID));
   function save() { try { localStorage.setItem(storeKey(), JSON.stringify(items)); } catch { /* ignore */ } }
+  // another chart (or tab window) changed this symbol's drawings: show them here too
+  window.addEventListener('storage', (e) => { if (e.key === storeKey()) { load(); if (selected && !items.some((d) => d.id === selected)) selected = null; render(); } });
   function commit(mutate: () => void) {
     undo.push(JSON.stringify(items));
     if (undo.length > 100) undo.shift();
@@ -548,6 +561,7 @@ export function initDrawings({ chart, candles, getBars, wrap }: Ctx) {
     if (hidden && !ruler) { editBar(); return; }
     if (!hidden) {
       for (const d of items) {
+        if (!mine(d)) continue;
         const g = el('g', { 'data-id': d.id, class: d.id === selected ? 'sel' : '' });
         drawOne(d, g);
       }
@@ -597,6 +611,7 @@ export function initDrawings({ chart, candles, getBars, wrap }: Ctx) {
   /** Keep every 3rd point of a long freehand stroke. */
   const thin = (pts: Pt[]) => pts.filter((_, i) => i % 3 === 0 || i === pts.length - 1);
   function finish(d: Drawing) {
+    d.sync = 'layout'; d.tab = tabId(); d.chart = CHART_ID;
     commit(() => items.push(d));
     selected = d.id;
     if (!stayInDrawing) setTool('cross');
@@ -715,9 +730,12 @@ export function initDrawings({ chart, candles, getBars, wrap }: Ctx) {
   bar.hidden = true;
   bar.innerHTML = `<color-swatch title="Colour"></color-swatch><select title="Line width">${[1, 1.5, 2, 3, 4].map((w) => `<option value="${w}">${w}px</option>`).join('')}</select>
     <span class="de-order"><button data-a="mkt" title="Send this position as a market order with its stop and target">Market</button><button data-a="lmt" title="Send this position as a limit order at the entry, with its stop and target">Limit</button></span>
+    <select data-a="sync" title="Where this drawing shows"><option value="none">This chart only</option><option value="layout">All charts in this tab</option><option value="global">All tabs</option></select>
     <button data-a="text" title="Edit text">Aa</button><button data-a="clone" title="Clone">⧉</button><button data-a="del" title="Delete (Del)">${ICON('<path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13"/>', 16)}</button>`;
   wrap.appendChild(bar);
-  const colorIn = bar.querySelector<ColorSwatch>('color-swatch')!, widthIn = bar.querySelector('select')!;
+  const colorIn = bar.querySelector<ColorSwatch>('color-swatch')!, widthIn = bar.querySelector<HTMLSelectElement>('select:not([data-a])')!;
+  const syncIn = bar.querySelector<HTMLSelectElement>('[data-a=sync]')!;
+  syncIn.onchange = () => { const d = sel(); if (d) commit(() => { d.sync = syncIn.value as Sync; d.tab = tabId(); if (d.sync === 'none') d.chart = CHART_ID; }); };
   const sel = () => items.find((i) => i.id === selected);
   colorIn.oninput = () => { const d = sel(); if (d) { d.color = colorIn.value; render(); } };
   colorIn.onchange = () => { const d = sel(); if (d) { const c = colorIn.value; undo.push(JSON.stringify(items)); d.color = c; save(); } };
@@ -743,6 +761,7 @@ export function initDrawings({ chart, candles, getBars, wrap }: Ctx) {
     if (!d || bar.hidden) return;
     colorIn.value = d.color || '#2962ff';
     widthIn.value = String(d.width ?? 1.5);
+    syncIn.value = d.sync ?? 'layout';
     bar.querySelector<HTMLElement>('[data-a=text]')!.hidden = !TOOLS[d.kind]?.text;
     bar.querySelector<HTMLElement>('.de-order')!.hidden = !onOrder || (d.kind !== 'long' && d.kind !== 'short');
   }
@@ -819,7 +838,7 @@ export function initDrawings({ chart, candles, getBars, wrap }: Ctx) {
   toggle('draw-stay', () => stayInDrawing, (v) => (stayInDrawing = v));
   toggle('draw-lock', () => locked, (v) => { locked = v; if (v) selected = null; });
   toggle('draw-hide', () => hidden, (v) => (hidden = v));
-  document.getElementById('draw-clear')!.onclick = () => { if (items.length) commit(() => (items = [])); };
+  document.getElementById('draw-clear')!.onclick = () => { if (items.some(mine)) commit(() => (items = items.filter((d) => !mine(d)))); };
   document.getElementById('undo-btn')!.onclick = doUndo;
   document.getElementById('redo-btn')!.onclick = doRedo;
 
@@ -834,4 +853,23 @@ export function initDrawings({ chart, candles, getBars, wrap }: Ctx) {
     /** Lets long/short position drawings send their trade (Market / Limit buttons on the selection bar). */
     onPositionOrder(fn: (o: PositionOrder) => void) { onOrder = fn; },
   };
+}
+
+/** The chart tab this page belongs to (tabs are kept by the main page in localStorage). */
+function tabState(): { active: number; tabs: { id?: string }[] } | null {
+  try { return JSON.parse(localStorage.getItem('chartTabs') || 'null'); } catch { return null; }
+}
+export function tabId(): string { const t = tabState(); return t?.tabs?.[t.active]?.id ?? 't0'; }
+function firstTabId(): string { return tabState()?.tabs?.[0]?.id ?? 't0'; }
+/** Forget a closed tab's own drawings (those synced to all tabs stay). */
+export function dropTabDrawings(id: string) {
+  for (let i = localStorage.length - 1; i >= 0; i--) {
+    const k = localStorage.key(i);
+    if (!k?.startsWith('drawings:')) continue;
+    try {
+      const list = JSON.parse(localStorage.getItem(k) || '[]') as Drawing[];
+      const keep = list.filter((d) => d.sync === 'global' || (d.tab ?? 't0') !== id);
+      if (keep.length !== list.length) localStorage.setItem(k, JSON.stringify(keep));
+    } catch { /* ignore */ }
+  }
 }
