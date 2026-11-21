@@ -256,7 +256,7 @@ class Binance(Provider):
     async def quote(self, sym):
         t = await self._get("/ticker/24hr", symbol=sym)
         last, opn = float(t["lastPrice"]), float(t["openPrice"])
-        return {"last": last, "prevClose": opn, "change": last - opn, "changePct": float(t["priceChangePercent"]),
+        return {"last": last, "open": opn, "prevClose": float(t.get("prevClosePrice") or opn), "change": last - opn, "changePct": float(t["priceChangePercent"]),
                 "volume": float(t["volume"]), "high": float(t["highPrice"]), "low": float(t["lowPrice"]),
                 "bid": float(t["bidPrice"]), "ask": float(t["askPrice"])}
 

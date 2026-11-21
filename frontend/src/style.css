@@ -423,3 +423,8 @@ dialog .pv-card > label { margin: 0; display: grid; grid-template-columns: 130px
 #trade-bar label.armed input { width: auto; margin: 0; accent-color: #f23645; }
 #trade-bar.is-armed { border-color: #f23645; box-shadow: 0 0 0 1px #f23645, 0 0 12px #f2364566; }
 #trade-bar.is-armed label.armed { background: #3a0d12; color: #ff6b76; font-weight: 600; }
+#to-latest { position: absolute; right: 74px; bottom: 36px; z-index: 4; width: 26px; height: 26px; border-radius: 4px; background: #1e1e1e; border: 1px solid #333; color: #d1d4dc; display: flex; align-items: center; justify-content: center; }
+#to-latest[hidden] { display: none; }
+#to-latest:hover { background: #2a2a2a; color: #fff; }
+#rail { padding-bottom: 6px; }
+body.side-folded #rail button.active { color: var(--text); }

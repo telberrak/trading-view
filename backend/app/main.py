@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -261,11 +262,26 @@ async def chart_ws(ws: WebSocket):
 
 @app.get("/api/details")
 async def get_details(key: str):
+    real = providers.route(key)
+    if providers.is_provider_key(real) and not providers.is_provider_key(key):
+        # an IBKR symbol whose data comes from another provider: IBKR's description, the provider's name as exchange
+        prov = providers.provider_of(real)
+        d = None
+        if ib.isConnected():
+            with contextlib.suppress(Exception):
+                d = await symbol_details(ib, key.upper())
+        if d is None:
+            d = await get_details(real)
+        d = dict(d)
+        d["exchange"] = providers.TITLES[prov]
+        if prov == "binance":
+            d["open"] = True  # crypto trades around the clock
+        return d
     if providers.is_provider_key(key):
         prov = providers.provider_of(key)
         ident = providers.identity(key)
         return {"key": key, "name": key.split(":", 1)[1], "exchange": providers.TITLES[prov], "secType": (ident or ("cfd",))[0].upper(),
-                "currency": "", "open": None, "industry": "", "category": "", "minTick": None, "multiplier": "", "localSymbol": ""}
+                "currency": "", "open": True if prov == "binance" else None, "industry": "", "category": "", "minTick": None, "multiplier": "", "localSymbol": ""}
     if not ib.isConnected():
         return JSONResponse({"error": "Not connected to IBKR"}, status_code=503)
     try:

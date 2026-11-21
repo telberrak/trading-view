@@ -76,12 +76,51 @@ const chart = createChart(el('chart'), {
     horzLine: { color: '#6a6a6a', style: LineStyle.Dashed, labelBackgroundColor: '#2a2a2a' } },
   rightPriceScale: { borderColor: '#2a2a2a' },
   timeScale: { borderColor: '#2a2a2a', rightOffset: 10, timeVisible: true, secondsVisible: false },
+  // drag, horizontal wheel / trackpad swipe and touch all pan; the wheel zooms, like TradingView
+  handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
+  handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true, axisDoubleClickReset: true },
+  kineticScroll: { mouse: false, touch: true },
 });
 const candles = chart.addSeries(CandlestickSeries, {
 });
 const volume = chart.addSeries(HistogramSeries, { priceFormat: { type: 'volume' }, priceScaleId: 'vol',
   lastValueVisible: false, priceLineVisible: false });
 chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.78, bottom: 0 } });
+
+// ---------- panning helpers ----------
+// Left / Right arrows move the chart a bar (Ctrl or Cmd: ten), Shift+wheel pans with a plain mouse wheel,
+// and a button brings you back to the latest bar after scrolling into history.
+window.addEventListener('keydown', (e) => {
+  if (e.shiftKey || e.altKey || document.activeElement instanceof HTMLInputElement || document.activeElement instanceof HTMLSelectElement
+    || document.activeElement instanceof HTMLTextAreaElement || document.querySelector('dialog[open]')) return;
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+  e.preventDefault();
+  const n = (e.ctrlKey || e.metaKey ? 10 : 1) * (e.key === 'ArrowLeft' ? -1 : 1);
+  panBy(n);
+});
+// the chart applies a scroll on its next frame, so quick repeats add up here rather than reading a stale position
+let panTarget: number | null = null;
+function panBy(bars: number) {
+  const ts = chart.timeScale();
+  panTarget = (panTarget ?? ts.scrollPosition()) + bars;
+  ts.scrollToPosition(panTarget, false);
+  requestAnimationFrame(() => requestAnimationFrame(() => (panTarget = null)));
+}
+el('chart').addEventListener('wheel', (e) => {
+  if (!e.shiftKey || e.deltaX !== 0 || !e.deltaY) return; // browsers that already turn Shift+wheel into deltaX are left alone
+  e.preventDefault(); e.stopPropagation();
+  panBy(-Math.sign(e.deltaY) * Math.max(1, Math.round(Math.abs(e.deltaY) / 20)));
+}, { capture: true, passive: false });
+const toLatest = document.createElement('button');
+toLatest.id = 'to-latest';
+toLatest.title = 'Scroll to the latest bar';
+toLatest.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l6 6-6 6M13 6l6 6-6 6"/></svg>';
+toLatest.hidden = true;
+el('chart-wrap').appendChild(toLatest);
+toLatest.onclick = () => chart.timeScale().scrollToRealTime();
+chart.timeScale().subscribeVisibleLogicalRangeChange(() => { toLatest.hidden = chart.timeScale().scrollPosition() > -3; });
+// a resize drag that ended outside the window must not leave the chart unable to take the mouse
+el('chart-wrap').addEventListener('pointerdown', () => document.body.classList.remove('resizing'), true);
 candles.priceScale().applyOptions({ scaleMargins: { top: 0.08, bottom: 0.24 } });
 
 // ---------- chart types ----------
@@ -246,7 +285,7 @@ function renderLegend(param?: MouseEventParams) {
   let b = bars[bars.length - 1];
   if (param?.time !== undefined) b = bars.find((x) => x.time === param.time) ?? b;
   const name = details?.name || label || shortName(key);
-  const exch = details?.exchange ? ` · ${details.exchange}` : '';
+  const exch = details?.exchange && !(sources && sources.using !== 'ibkr') ? ` · ${details.exchange}` : ''; // the source chip names the provider
   const status = details?.open == null ? '' : `<span class="status ${details.open ? '' : 'closed'}">${details.open ? 'Open' : 'Closed'}</span>`;
   const src = sources ? `<span class="src${sources.ident && sources.options.length > 1 ? ' pick' : ''}" title="Data source${sources.ident && sources.options.length > 1 ? ': click to change for this symbol' : ''}">${sources.options.find((o) => o.id === sources!.using)?.title ?? sources.using}${sources.override ? ' •' : ''}</span>` : '';
   const head = `<span class="title">${avatar(shortName(key), 18)}<span class="t"></span></span>${src}${status}`;
@@ -501,18 +540,41 @@ el('rp-play').innerHTML = icon('play', 18);
 el('rp-step').innerHTML = icon('step', 18);
 
 // ---------- right rail toggles (main page only) ----------
+/** The right panel folds away like TradingView's: the fold button at the bottom of the rail, or clicking the icon of
+ * the panel already showing. Clicking any icon while folded opens it again. Which sections are on is kept. */
+let sideFolded = load('sideFolded', false);
+const SECTIONS = ['watchlist', 'details', 'trading', 'alerts'];
+function applySide() {
+  const anyOn = SECTIONS.some((id) => !el(id).classList.contains('hidden'));
+  el('side').classList.toggle('hidden', !anyOn || sideFolded);
+  document.body.classList.toggle('side-folded', sideFolded || !anyOn);
+  const f = el('rail-fold');
+  f.title = sideFolded || !anyOn ? 'Show the side panel' : 'Hide the side panel';
+  f.innerHTML = icon(sideFolded || !anyOn ? 'unfold' : 'fold');
+  sideLayout?.layout();
+  chart.timeScale().applyOptions({}); // the chart takes the freed width
+}
+function setFolded(v: boolean) { sideFolded = v; save('sideFolded', v); applySide(); }
 function railToggle(btnId: string, panelId: string, store: string, dflt = true) {
   const btn = el(btnId), panel = el(panelId);
   const apply = (on: boolean) => {
     btn.classList.toggle('active', on);
     panel.classList.toggle('hidden', !on);
-    const anyOn = ['watchlist', 'details', 'trading', 'alerts'].some((id) => !el(id).classList.contains('hidden'));
-    el('side').classList.toggle('hidden', !anyOn);
-    sideLayout?.layout();
+    applySide();
   };
   let on = load(store, dflt);
   apply(on);
-  btn.onclick = () => { on = !on; save(store, on); apply(on); };
+  btn.onclick = () => {
+    if (sideFolded) { // folded: open the panel with this section showing
+      if (!on) { on = true; save(store, on); }
+      sideFolded = false; save('sideFolded', false);
+      apply(on);
+      return;
+    }
+    // the only section showing: fold the panel instead of emptying it
+    if (on && SECTIONS.filter((id) => !el(id).classList.contains('hidden')).length === 1) { setFolded(true); return; }
+    on = !on; save(store, on); apply(on);
+  };
 }
 const sideLayout = EMBED ? null : initSideLayout();
 if (!EMBED) {
@@ -520,6 +582,10 @@ if (!EMBED) {
   railToggle('rail-det', 'details', 'showDetails');
   railToggle('rail-tr', 'trading', 'showTrading', false);
   railToggle('rail-al', 'alerts', 'showAlerts', false);
+  el('rail-fold').onclick = () => {
+    if (!SECTIONS.some((id) => !el(id).classList.contains('hidden'))) { el('rail-wl').click(); if (sideFolded) setFolded(false); return; }
+    setFolded(!sideFolded);
+  };
 }
 
 // ---------- symbol search + watchlist ----------

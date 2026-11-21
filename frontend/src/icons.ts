@@ -15,6 +15,8 @@ const P: Record<string, string> = {
   info: '<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 8v.01"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   more: '<circle cx="6" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="18" cy="12" r="1"/>',
+  fold: '<path d="M9 6l6 6-6 6M15 6v0"/><path d="M19 5v14"/>',
+  unfold: '<path d="M15 6l-6 6 6 6"/><path d="M5 5v14"/>',
   chevron: '<path d="M7 10l5 5 5-5"/>',
   play: '<path d="M8 5.5v13l10-6.5z" fill="currentColor"/>',
   pause: '<path d="M8 5v14M16 5v14" stroke-width="3"/>',

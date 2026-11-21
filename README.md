@@ -103,9 +103,16 @@ NinjaTrader 8's desktop connection (ATI / add-ons) is Windows-only and is not us
 
 Limits worth knowing: order flow (footprint, bubbles, delta) needs IBKR's tick data; IG updates by polling its price snapshot every 2 seconds; Polygon and Databento are polled.
 
+## Moving around the chart
+
+Drag the chart to pan; a trackpad's sideways swipe or Shift + mouse wheel pans too, and the plain wheel zooms. Left and
+Right arrows move a bar at a time (with Ctrl or Cmd, ten). After scrolling into history, the » button at the bottom
+right of the chart jumps back to the latest bar.
+
 ## Layout
 
 - Drag the left edge of the right sidebar to make it wider or narrower, and drag the bars between the watchlist, details, trading and alerts panels to resize them. Sizes are remembered; double-click a bar to reset it.
+- The fold button at the bottom of the right icon rail hides the whole side panel so the chart gets the width, and it stays hidden next time. Clicking any rail icon brings it back; clicking the icon of the only panel showing folds it again.
 
 ## Symbol details and news
 

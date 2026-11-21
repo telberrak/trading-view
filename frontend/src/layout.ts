@@ -71,10 +71,13 @@ function drag<S, R>(handle: HTMLElement, cursor: string, start: () => S, move: (
     document.body.style.cursor = cursor;
     document.body.classList.add('resizing');
     handle.classList.add('dragging');
+    try { handle.setPointerCapture(e.pointerId); } catch { /* ignore */ }
     const mv = (ev: PointerEvent) => { last = move(s, ev.clientX - x0, ev.clientY - y0); };
     const up = () => {
       window.removeEventListener('pointermove', mv);
       window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+      window.removeEventListener('blur', up);
       document.body.style.cursor = '';
       document.body.classList.remove('resizing');
       handle.classList.remove('dragging');
@@ -82,5 +85,7 @@ function drag<S, R>(handle: HTMLElement, cursor: string, start: () => S, move: (
     };
     window.addEventListener('pointermove', mv);
     window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+    window.addEventListener('blur', up);
   });
 }
