@@ -64,21 +64,54 @@ const retr = (d: Drawing, a: number, b: number, c: number) => {
   const den = Math.abs(p[b].p - p[a].p);
   return den ? (Math.abs(p[c].p - p[b].p) / den).toFixed(3) : '';
 };
+/** What the position tool needs from the app: quantity, contract tick size and multiplier, latest price. */
+export const positionInfo = { qty: () => 1, tick: () => 0.01, mult: () => 1, last: (): { t: number; p: number } | null => null };
+const num = (v: number, d = 2) => v.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
 function positionTool(r: R, long: boolean) {
   const { X, Y, d } = r;
   const entry = d.pts[0].p;
   const tgt = d.pts[1]?.p ?? entry, stp = d.pts[2]?.p ?? entry;
-  const x1 = X[0], x2 = Math.max(...X, X[0] + 120);
-  const yT = Y[1] ?? Y[0], yS = Y[2] ?? Y[0];
-  r.poly([[x1, Y[0]], [x2, Y[0]], [x2, yT], [x1, yT]], { fill: GREEN, 'fill-opacity': 0.2, stroke: 'none' }, true);
-  r.poly([[x1, Y[0]], [x2, Y[0]], [x2, yS], [x1, yS]], { fill: RED, 'fill-opacity': 0.2, stroke: 'none' }, true);
-  r.line(x1, Y[0], x2, Y[0], { stroke: '#9e9e9e', 'stroke-width': 1 });
+  const x1 = X[0], x2 = posRight(r);
+  const yE = Y[0], yT = Y[1] ?? Y[0], yS = Y[2] ?? Y[0];
+  const LG = 'rgba(8,153,129,', LR = 'rgba(242,54,69,';
+  r.poly([[x1, yE], [x2, yE], [x2, yT], [x1, yT]], { fill: `${LG}0.2)`, stroke: 'none' }, true);
+  r.poly([[x1, yE], [x2, yE], [x2, yS], [x1, yS]], { fill: `${LR}0.2)`, stroke: 'none' }, true);
   r.hitBox(x1, Math.min(yT, yS), x2 - x1, Math.abs(yT - yS));
+  const qty = positionInfo.qty(), tick = positionInfo.tick() || 0.01, mult = positionInfo.mult() || 1;
+  const sign = long ? 1 : -1;
+  // progress to the current price: shaded box and a dashed line from the entry
+  const last = positionInfo.last();
+  let pnl = 0;
+  if (last && !r.preview && last.t >= d.pts[0].t) {
+    pnl = (last.p - entry) * sign * qty * mult;
+    const ll = r.lOf(last.t);
+    const lx = ll == null ? null : r.xAtL(ll), ly = r.yOf(last.p);
+    if (lx != null && ly != null) {
+      const cx = Math.max(x1, Math.min(x2, lx));
+      const top = Math.min(yT, yS), bot = Math.max(yT, yS), cy = Math.max(top, Math.min(bot, ly));
+      r.poly([[x1, yE], [cx, yE], [cx, cy], [x1, cy]], { fill: `${pnl >= 0 ? LG : LR}0.3)`, stroke: 'none' }, true);
+      r.line(x1, yE, cx, cy, { stroke: '#9598a1', 'stroke-width': 1, 'stroke-dasharray': '4 3' });
+    }
+  }
+  r.line(x1, yE, x2, yE, { stroke: '#787b86', 'stroke-width': 1 });
+  const side = (p: number) => {
+    const diff = Math.abs(p - entry);
+    return `${r.fmt(diff)} (${((diff / entry) * 100).toFixed(3)}%) ${num(Math.round(diff / tick), 0)}, Amount: ${num(diff * qty * mult)}`;
+  };
+  const mid = (x1 + x2) / 2;
+  const tTop = yT < yS;
+  r.label(mid, (tTop ? yT - 22 : yT + 4), `Target: ${side(tgt)}`, GREEN, { anchor: 'middle' });
+  r.label(mid, (tTop ? yS + 4 : yS - 22), `Stop: ${side(stp)}`, RED, { anchor: 'middle' });
   const risk = Math.abs(entry - stp), reward = Math.abs(tgt - entry);
-  r.label(x1 + 4, yT + (long ? -18 : 4), `Target ${r.fmt(tgt)} (${pct(entry, tgt)})`, GREEN);
-  r.label(x1 + 4, yS + (long ? 4 : -18), `Stop ${r.fmt(stp)} (${pct(entry, stp)})`, RED);
-  r.label(x1 + 4, Y[0] + (long ? 4 : -18), `${long ? 'Long' : 'Short'} @ ${r.fmt(entry)}${risk ? `  R:R ${(reward / risk).toFixed(2)}` : ''}`, '#454545');
+  const l1 = `Open PnL: ${num(pnl)}, Qty: ${qty}`, l2 = `Risk/reward ratio: ${risk ? (reward / risk).toFixed(2).replace(/\.?0+$/, '') : '–'}`;
+  const w = Math.max(l1.length, l2.length) * 6.4 + 14;
+  const ly = yE + (tTop ? 6 : -42);
+  r.poly([[mid - w / 2, ly], [mid + w / 2, ly], [mid + w / 2, ly + 36], [mid - w / 2, ly + 36]], { fill: pnl < 0 ? RED : GREEN, stroke: 'none' }, true);
+  r.text(mid, ly + 14, l1, { fill: '#fff', 'font-size': 11.5, 'text-anchor': 'middle' });
+  r.text(mid, ly + 29, l2, { fill: '#fff', 'font-size': 11.5, 'text-anchor': 'middle' });
 }
+/** Right edge of a position drawing: where its target/stop points sit, at least 120px wide. */
+function posRight(r: { X: number[] }) { return Math.max(r.X[1] ?? r.X[0], r.X[2] ?? r.X[0], r.X[0] + 120); }
 function barsAndTime(r: R, a: number, b: number) {
   const la = r.lOf(r.d.pts[a].t) ?? 0, lb = r.lOf(r.d.pts[b].t) ?? 0;
   const secs = Math.abs(r.d.pts[b].t - r.d.pts[a].t);
@@ -500,7 +533,13 @@ export function initDrawings({ chart, candles, getBars, wrap }: Ctx) {
     };
     def.draw(r);
     if (!preview && d.id === selected && !locked && def.n !== -1) {
-      d.pts.forEach((_, i) => el('circle', { cx: r.X[i], cy: r.Y[i], r: 5, class: 'handle', 'data-i': i, 'data-id': d.id }, g));
+      if (d.kind === 'long' || d.kind === 'short') {
+        // TradingView-style: target, entry and stop on the left edge, width on the right
+        const x2 = posRight(r);
+        const sq = (hx: number, hy: number, i: number) => el('rect', { x: hx - 4.5, y: hy - 4.5, width: 9, height: 9, class: 'handle', 'data-i': i, 'data-id': d.id }, g);
+        sq(r.X[0], r.Y[1], 1); sq(r.X[0], r.Y[2], 2); sq(x2, r.Y[0], 3);
+        el('circle', { cx: r.X[0], cy: r.Y[0], r: 5, class: 'handle', 'data-i': 0, 'data-id': d.id }, g);
+      } else d.pts.forEach((_, i) => el('circle', { cx: r.X[i], cy: r.Y[i], r: 5, class: 'handle', 'data-i': i, 'data-id': d.id }, g));
     }
   }
   function render() {
@@ -619,7 +658,11 @@ export function initDrawings({ chart, candles, getBars, wrap }: Ctx) {
       if (idx >= 0) {
         const [px, py] = local(ev);
         const p = ptFromXY(px, py);
-        if (p) d.pts[idx] = p;
+        if (p && (d.kind === 'long' || d.kind === 'short')) {
+          if (idx === 0) d.pts[0] = { t: Math.min(p.t, d.pts[1].t), p: p.p };
+          else if (idx === 3) { if (p.t > d.pts[0].t) { d.pts[1] = { ...d.pts[1], t: p.t }; d.pts[2] = { ...d.pts[2], t: p.t }; } }
+          else d.pts[idx] = { t: d.pts[idx].t, p: p.p };
+        } else if (p) d.pts[idx] = p;
       } else {
         d.pts = orig.map((p) => {
           const px = (x(p.t) ?? 0) + ev.clientX - start.x, py = (y(p.p) ?? 0) + ev.clientY - start.y;

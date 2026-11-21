@@ -13,7 +13,7 @@ import {
   type UTCTimestamp,
 } from 'lightweight-charts';
 import { initAlerts } from './alerts';
-import { initDrawings } from './drawings';
+import { initDrawings, positionInfo } from './drawings';
 import { avatar, icon } from './icons';
 import { type Bar } from './indicators';
 import type { ISeriesApi } from 'lightweight-charts';
@@ -508,7 +508,7 @@ if (!EMBED) {
 // ---------- symbol search + watchlist ----------
 /** Switch this chart's symbol. `fromSync`: the change came from another chart, so don't echo it back. */
 function choose(k: string, fromSync = false) {
-  key = k; details = null; subscribe(); watchlist?.setActive(key); alerts?.refreshLines(); trading?.symbolChanged();
+  key = k; details = null; loadDetails(); subscribe(); watchlist?.setActive(key); alerts?.refreshLines(); trading?.symbolChanged();
   if (!fromSync && syncOpts().symbol) post({ type: 'symbol', from: CHART_ID, key: k });
 }
 /** Symbols picked in the side panels go to whichever chart is active in the layout. */
@@ -517,6 +517,17 @@ const multi = EMBED ? null : initMultiChart(() => { sideLayout?.layout(); chart.
 const alerts = EMBED ? null : initAlerts({ getKey: () => key, getLast: () => allBars[allBars.length - 1]?.close ?? null, candles, onPick: pick });
 const trading = EMBED ? null : initTrading({ getKey: () => key, getLast: () => allBars[allBars.length - 1]?.close ?? null, candles, onPick: pick });
 if (trading) drawings.onPositionOrder((o) => trading.openPosition(o));
+positionInfo.qty = () => Number(document.querySelector<HTMLInputElement>('#trade-bar input')?.value) || 1;
+positionInfo.tick = () => details?.minTick || 0.01;
+positionInfo.mult = () => Number(details?.multiplier) || 1;
+positionInfo.last = () => { const b = bars[bars.length - 1]; return b ? { t: b.time, p: b.close } : null; };
+/** Contract details for charts without the side panel (extra charts in a multi-chart layout). */
+function loadDetails() {
+  if (!EMBED) return;
+  const k = key;
+  fetch(`/api/details?key=${encodeURIComponent(k)}`).then((r) => (r.ok ? r.json() : null)).then((d) => { if (d && k === key) { details = d; renderLegend(); } }).catch(() => {});
+}
+loadDetails();
 attachSearch(el<HTMLInputElement>('symbol'), el<HTMLUListElement>('results'), (k) => choose(k));
 const screener = EMBED ? null : initScreener(pick, () => chart.timeScale().applyOptions({}));
 if (!EMBED) {
