@@ -112,6 +112,17 @@ options in the same menu: symbol, interval and crosshair (on by default).
 Each extra chart is its own IBKR data stream (history plus live bars), and a footprint chart also uses
 a tick-by-tick slot, so four footprint charts may hit your IBKR limits.
 
+## Saved layouts and templates
+
+- **Layouts**: layout menu > *Save layout as…* stores the grid, sync options and every chart's symbol,
+  interval, chart type and indicators under a name. Pick a saved layout in the same menu to open it.
+- **Indicator templates**: Indicators > *Save indicators as template…*; click a template in that menu to
+  replace the chart's indicators with it (works in every chart of a layout).
+- **Chart style templates**: layout menu > *Save chart style as…* keeps the colours and chart type;
+  picking one applies it to all charts.
+
+All of these are saved in `backend/data/library.json`, so they survive browser resets.
+
 ## Bar replay
 
 Replay button > click the bar to start from. Then play/pause, step one bar (Shift+Right), pick a speed, choose a new start or exit.

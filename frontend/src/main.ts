@@ -25,6 +25,7 @@ import { loadColors, openChartSettings, withAlpha, type ChartColors } from './se
 import { attachSearch, shortName } from './search';
 import { initWatchlist, type Details } from './watchlist';
 import { initMultiChart } from './multichart';
+import { askName, lib, loadLibrary, onLibrary, updateLibrary } from './library';
 import { CHART_ID, EMBED, PREFIX, listen, post, syncOpts } from './sync';
 import './style.css';
 
@@ -517,6 +518,71 @@ window.addEventListener('keydown', (e) => {
   if (document.activeElement instanceof HTMLInputElement || e.ctrlKey || e.metaKey || e.altKey) return;
   if (/^[a-zA-Z]$/.test(e.key)) { const i = el<HTMLInputElement>('symbol'); i.focus(); i.value = ''; }
 });
+
+// ---------- saved layouts and chart style templates (layout menu, main page) ----------
+const CHART_KEYS = ['key', 'tf', 'chartType', 'studies'];
+const prefixOf = (i: number) => (i === 0 ? '' : `c${i}:`);
+function snapshotLayout() {
+  const n = multi!.count();
+  return { layout: multi!.layout, sync: syncOpts(), charts: Array.from({ length: n }, (_, i) =>
+    Object.fromEntries(CHART_KEYS.map((k) => [k, localStorage.getItem(prefixOf(i) + k)]))) };
+}
+function restoreLayout(l: { layout: string; sync: unknown; charts: Record<string, string | null>[] }) {
+  l.charts.forEach((c, i) => CHART_KEYS.forEach((k) => {
+    const v = c[k];
+    if (v == null) localStorage.removeItem(prefixOf(i) + k); else localStorage.setItem(prefixOf(i) + k, v);
+  }));
+  localStorage.setItem('layout', JSON.stringify(l.layout));
+  if (l.sync) localStorage.setItem('layoutSync', JSON.stringify(l.sync));
+  location.reload();
+}
+function libRow(menu: HTMLElement, name: string, onPick: () => void, onDelete: () => void, title: string) {
+  const b = document.createElement('button');
+  b.innerHTML = '<span></span><span class="spacer"></span><span class="mini" title="Delete">×</span>';
+  (b.children[0] as HTMLElement).textContent = name;
+  b.title = title;
+  b.onclick = (e) => { e.stopPropagation(); onPick(); };
+  (b.lastElementChild as HTMLElement).onclick = (e) => { e.stopPropagation(); onDelete(); };
+  menu.appendChild(b);
+}
+multi?.addMenuSection((menu) => {
+  const hint = (t: string) => { const h = document.createElement('div'); h.className = 'hint'; h.textContent = t; menu.appendChild(h); };
+  const action = (label: string, f: () => void) => {
+    const b = document.createElement('button');
+    b.innerHTML = `${icon('plus', 14)}<span></span>`;
+    (b.children[1] as HTMLElement).textContent = label;
+    b.onclick = (e) => { e.stopPropagation(); f(); };
+    menu.appendChild(b);
+  };
+  const rerender = () => { multi!.closeMenu(); el('layout-btn').click(); };
+  hint('Saved layouts');
+  action('Save layout as…', async () => {
+    const name = askName('Layout name', localStorage.getItem('layoutName') ? JSON.parse(localStorage.getItem('layoutName')!) : '');
+    if (!name) return;
+    const snap = snapshotLayout();
+    await updateLibrary((l) => { l.layouts[name] = snap; });
+    localStorage.setItem('layoutName', JSON.stringify(name));
+    rerender();
+  });
+  for (const [name, l] of Object.entries(lib().layouts))
+    libRow(menu, name, () => { localStorage.setItem('layoutName', JSON.stringify(name)); restoreLayout(l); },
+      async () => { await updateLibrary((x) => { delete x.layouts[name]; }); rerender(); }, 'Open this layout');
+  hint('Chart style templates');
+  action('Save chart style as…', async () => {
+    const name = askName('Style name');
+    if (!name) return;
+    await updateLibrary((l) => { l.chartTemplates[name] = { colors: colors, chartType }; });
+    rerender();
+  });
+  for (const [name, t] of Object.entries(lib().chartTemplates))
+    libRow(menu, name, () => {
+      localStorage.setItem('chartColors', JSON.stringify(t.colors));
+      for (let i = 0; i < 4; i++) localStorage.setItem(prefixOf(i) + 'chartType', JSON.stringify(t.chartType));
+      location.reload();
+    }, async () => { await updateLibrary((x) => { delete x.chartTemplates[name]; }); rerender(); }, 'Apply colours and chart type to all charts');
+});
+onLibrary(() => studies.renderMenu(indMenu));
+loadLibrary();
 
 // ---------- multi-chart sync ----------
 let hovering = false;

@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from ib_async import IB
 
-from . import contracts, news, watchlists
+from . import contracts, library, news, watchlists
 from .details import details as symbol_details
 from .quotes import QuoteSession
 from .alerts import AlertEngine
@@ -283,6 +283,16 @@ async def events_ws(ws: WebSocket):
         pass
     finally:
         event_queues.discard(q)
+
+
+@app.get("/api/library")
+async def get_library():
+    return library.load()
+
+
+@app.put("/api/library")
+async def put_library(data: dict = Body(...)):
+    return library.save(data)
 
 
 @app.get("/api/watchlists")

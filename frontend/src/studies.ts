@@ -1,6 +1,7 @@
 import { HistogramSeries, LineSeries, LineStyle, LineType, type IChartApi, type ISeriesApi, type UTCTimestamp } from 'lightweight-charts';
 import { compact } from './footprint';
 import { icon } from './icons';
+import { askName, lib, updateLibrary } from './library';
 import { atr, bollinger, emaArr, macd, prevSession, rsi, sessionStarts, smaArr, stochastic, vwap, windowRange, type Bar } from './indicators';
 
 /**
@@ -324,9 +325,40 @@ export function initStudies({ chart, getBars, isIntraday, wrap, onChange, custom
       };
       menu.appendChild(b);
     }
+    // ----- templates (shared by all charts) -----
+    const th = document.createElement('div');
+    th.className = 'hint'; th.textContent = 'Templates';
+    menu.appendChild(th);
+    const saveBtn = document.createElement('button');
+    saveBtn.innerHTML = `${icon('plus', 14)}<span>Save indicators as template…</span>`;
+    saveBtn.onclick = async (e) => {
+      e.stopPropagation();
+      const name = askName('Template name');
+      if (!name) return;
+      await updateLibrary((l) => { l.indicatorTemplates[name] = JSON.parse(JSON.stringify(cfgs)); });
+      renderMenu(menu);
+    };
+    menu.appendChild(saveBtn);
+    for (const [name, list] of Object.entries(lib().indicatorTemplates)) {
+      const b = document.createElement('button');
+      b.innerHTML = '<span></span><span class="spacer"></span>';
+      (b.children[0] as HTMLElement).textContent = name;
+      b.title = 'Replace this chart\'s indicators with this template';
+      b.onclick = (e) => { e.stopPropagation(); setAll(list as StudyCfg[]); renderMenu(menu); };
+      const del = document.createElement('span');
+      del.className = 'mini'; del.textContent = '×'; del.title = 'Delete template';
+      del.onclick = async (e) => { e.stopPropagation(); await updateLibrary((l) => { delete l.indicatorTemplates[name]; }); renderMenu(menu); };
+      b.appendChild(del);
+      menu.appendChild(b);
+    }
+  }
+  function setAll(list: StudyCfg[]) {
+    cfgs.splice(0, cfgs.length, ...JSON.parse(JSON.stringify(list)).filter((c: StudyCfg) => DEFS[c.kind]));
+    builtSig = '';
+    changed();
   }
 
   /** True when a visible indicator needs order-flow (footprint) data. */
   const needsFlow = () => visible().some((c) => FLOW_KINDS.has(c.kind));
-  return { compute, overlayLegend, paneLegends, renderMenu, needsFlow };
+  return { compute, overlayLegend, paneLegends, renderMenu, needsFlow, setAll };
 }
