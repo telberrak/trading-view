@@ -1,3 +1,4 @@
+import { fade } from './colorpick';
 import type {
   IChartApi, IPrimitivePaneRenderer, IPrimitivePaneView, ISeriesApi, ISeriesPrimitive, Time,
 } from 'lightweight-charts';
@@ -215,8 +216,4 @@ export function initFootprint({ chart, candles, getBars, shift, barSeconds, colo
   };
 }
 
-function rgba(hex: string, a: number) {
-  if (!hex.startsWith('#')) return hex;
-  const n = parseInt(hex.length === 4 ? hex.slice(1).split('').map((x) => x + x).join('') : hex.slice(1, 7), 16);
-  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a.toFixed(3)})`;
-}
+const rgba = fade;

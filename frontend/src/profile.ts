@@ -1,3 +1,4 @@
+import { fade } from './colorpick';
 import type { IChartApi, IPrimitivePaneRenderer, IPrimitivePaneView, ISeriesApi, ISeriesPrimitive, Time } from 'lightweight-charts';
 import type { FpBar } from './footprint';
 import { sessionStarts, type Bar } from './indicators';
@@ -157,8 +158,4 @@ export function initProfiles({ chart, candles, getBars, flow }: Ctx) {
   };
 }
 
-function alpha(hex: string, a: number) {
-  if (!hex.startsWith('#')) return hex;
-  const n = parseInt(hex.slice(1, 7), 16);
-  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
-}
+const alpha = fade;

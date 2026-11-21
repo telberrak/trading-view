@@ -1,5 +1,6 @@
 import type { IChartApi, ISeriesApi, Logical } from 'lightweight-charts';
 import type { Bar } from './indicators';
+import type { ColorSwatch } from './colorpick';
 
 /**
  * Drawing tools rendered on an SVG layer over the price pane. Points are stored as (time, price), so
@@ -669,11 +670,11 @@ export function initDrawings({ chart, candles, getBars, wrap }: Ctx) {
   const bar = document.createElement('div');
   bar.id = 'draw-edit';
   bar.hidden = true;
-  bar.innerHTML = `<input type="color" title="Colour" /><select title="Line width">${[1, 1.5, 2, 3, 4].map((w) => `<option value="${w}">${w}px</option>`).join('')}</select>
+  bar.innerHTML = `<color-swatch title="Colour"></color-swatch><select title="Line width">${[1, 1.5, 2, 3, 4].map((w) => `<option value="${w}">${w}px</option>`).join('')}</select>
     <span class="de-order"><button data-a="mkt" title="Send this position as a market order with its stop and target">Market</button><button data-a="lmt" title="Send this position as a limit order at the entry, with its stop and target">Limit</button></span>
     <button data-a="text" title="Edit text">Aa</button><button data-a="clone" title="Clone">⧉</button><button data-a="del" title="Delete (Del)">${ICON('<path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13"/>', 16)}</button>`;
   wrap.appendChild(bar);
-  const colorIn = bar.querySelector('input')!, widthIn = bar.querySelector('select')!;
+  const colorIn = bar.querySelector<ColorSwatch>('color-swatch')!, widthIn = bar.querySelector('select')!;
   const sel = () => items.find((i) => i.id === selected);
   colorIn.oninput = () => { const d = sel(); if (d) { d.color = colorIn.value; render(); } };
   colorIn.onchange = () => { const d = sel(); if (d) { const c = colorIn.value; undo.push(JSON.stringify(items)); d.color = c; save(); } };
@@ -697,7 +698,7 @@ export function initDrawings({ chart, candles, getBars, wrap }: Ctx) {
     const d = sel();
     bar.hidden = !d || locked || hidden;
     if (!d || bar.hidden) return;
-    if (document.activeElement !== colorIn) colorIn.value = /^#[0-9a-f]{6}$/i.test(d.color) ? d.color : '#2962ff';
+    colorIn.value = d.color || '#2962ff';
     widthIn.value = String(d.width ?? 1.5);
     bar.querySelector<HTMLElement>('[data-a=text]')!.hidden = !TOOLS[d.kind]?.text;
     bar.querySelector<HTMLElement>('.de-order')!.hidden = !onOrder || (d.kind !== 'long' && d.kind !== 'short');

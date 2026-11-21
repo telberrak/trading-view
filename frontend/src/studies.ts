@@ -273,7 +273,7 @@ export function initStudies({ chart, getBars, isIntraday, wrap, onChange, custom
       ${def.params.map(([n], i) => (isFlag(n)
         ? `<label class="sd-flag"><input type="checkbox" data-p="${i}" ${c.params[i] ? 'checked' : ''} /> ${n.slice(0, -1)}</label>`
         : `<label>${n}<input type="number" step="any" min="0" data-p="${i}" value="${c.params[i]}" /></label>`)).join('')}
-      <div class="sd-colors">${outs.map((o) => `<label class="sd-color">${outs.length > 1 ? `<input type="checkbox" data-v="${o.name}" ${c.hidden?.includes(o.name) ? '' : 'checked'} title="Show this line" />` : ''}<input type="color" data-o="${o.name}" value="${o.color}" /><span>${o.name}</span></label>`).join('')}</div>
+      <div class="sd-colors">${outs.map((o) => `<label class="sd-color">${outs.length > 1 ? `<input type="checkbox" data-v="${o.name}" ${c.hidden?.includes(o.name) ? '' : 'checked'} title="Show this line" />` : ''}<color-swatch data-o="${o.name}" value="${o.color}"></color-swatch><span>${o.name}</span></label>`).join('')}</div>
       <label>Line width <select data-w>${[1, 2, 3, 4].map((w) => `<option ${w === (c.width ?? 1) ? 'selected' : ''}>${w}</option>`).join('')}</select></label>
       <div class="dlg-btns"><button type="button" data-reset>Defaults</button><span class="spacer"></span><button value="cancel">Cancel</button><button value="ok" class="primary">OK</button></div></form>`;
     dlg.querySelector('h3')!.textContent = def.title;

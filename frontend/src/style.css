@@ -358,3 +358,30 @@ dialog input[type=color]::-webkit-color-swatch { border: 0; border-radius: 2px; 
 #screener tr.sel td { background: #1c2333; }
 #screener .up { color: var(--green, #22ab94); }
 #screener .down { color: var(--red, #f23645); }
+
+/* colour picker */
+color-swatch { display: inline-block; width: 28px; height: 22px; border-radius: 4px; border: 1px solid var(--border); cursor: pointer; flex: none;
+  background: linear-gradient(var(--sw), var(--sw)), repeating-conic-gradient(#888 0 25%, #ddd 0 50%) 0 0 / 8px 8px; }
+color-swatch:hover, color-swatch:focus-visible { border-color: var(--accent); outline: none; }
+.cp-pop { position: fixed; inset: auto; margin: 0; padding: 12px; width: max-content; background: #1e1e1e; color: var(--text); border: 1px solid var(--border);
+  border-radius: 8px; box-shadow: 0 8px 28px rgba(0,0,0,.55); z-index: 1000; overflow: visible; }
+.cp-pop[hidden] { display: none; }
+.cp-row { display: flex; gap: 4px; margin-bottom: 4px; }
+.cp-gap { height: 8px; }
+.cp-cell { width: 18px; height: 18px; padding: 0; border-radius: 3px; border: 1px solid rgba(255,255,255,.08); cursor: pointer; }
+.cp-cell:hover { transform: scale(1.15); }
+.cp-cell.on { outline: 2px solid #fff; outline-offset: 1px; }
+.cp-sep { border-top: 1px solid var(--border); margin: 10px 0; }
+.cp-add { width: 18px; height: 18px; padding: 0; font-size: 18px; line-height: 16px; color: var(--text); background: none; border: none; cursor: pointer; }
+.cp-native { position: absolute; width: 0; height: 0; opacity: 0; pointer-events: none; border: 0; padding: 0; }
+.cp-label { font-size: 12px; color: var(--muted); margin: 8px 0 6px; }
+.cp-op { display: flex; align-items: center; gap: 10px; }
+.cp-range { flex: 1; -webkit-appearance: none; appearance: none; height: 8px; border-radius: 4px; margin: 0;
+  background: linear-gradient(to right, transparent, var(--cp-c, #2962ff)), repeating-conic-gradient(#888 0 25%, #ddd 0 50%) 0 0 / 8px 8px; }
+.cp-range::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #fff; border: 2px solid #131722; cursor: pointer; }
+.cp-pct { display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; font-size: 12px; }
+.cp-num { width: 30px; background: none; border: none; color: var(--text); font: inherit; text-align: right; -moz-appearance: textfield; }
+.cp-num::-webkit-inner-spin-button { display: none; }
+.cp-pop input.cp-num { width: 30px; padding: 0; border: none; background: none; font-size: 12px; }
+.cp-pop input.cp-range { padding: 0; border: none; }
+.cp-pop { font-size: 12px; }

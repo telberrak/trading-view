@@ -1,3 +1,4 @@
+import { fade } from './colorpick';
 /** Chart appearance settings (colours, grid, volume), saved in localStorage. */
 export interface ChartColors {
   up: string; down: string; wickUp: string; wickDown: string;
@@ -15,10 +16,7 @@ export const DEFAULT_COLORS: ChartColors = {
 export function loadColors(): ChartColors {
   try { return { ...DEFAULT_COLORS, ...JSON.parse(localStorage.getItem('chartColors') || '{}') }; } catch { return { ...DEFAULT_COLORS }; }
 }
-export const withAlpha = (hex: string, a: number) => {
-  const n = parseInt(hex.slice(1), 16);
-  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
-};
+export const withAlpha = (c: string, a: number) => fade(c, a);
 
 const ROWS: [string, [keyof ChartColors, string][]][] = [
   ['Candles', [['up', 'Body up'], ['down', 'Body down'], ['wickUp', 'Wick up'], ['wickDown', 'Wick down']]],
@@ -38,7 +36,7 @@ export function openChartSettings(current: ChartColors, apply: (c: ChartColors) 
     <div class="cs-group"><div class="cs-title">${title}</div><div class="cs-grid">${items.map(([k, label]) =>
       typeof DEFAULT_COLORS[k] === 'boolean'
         ? `<label class="cs-item"><input type="checkbox" data-k="${k}" /><span>${label}</span></label>`
-        : `<label class="cs-item"><input type="color" data-k="${k}" /><span>${label}</span></label>`).join('')}</div></div>`).join('')}
+        : `<label class="cs-item"><color-swatch data-k="${k}"></color-swatch><span>${label}</span></label>`).join('')}</div></div>`).join('')}
     <div class="dlg-btns"><button type="button" data-reset>Defaults</button><span class="spacer"></span><button value="cancel">Cancel</button><button value="ok" class="primary">OK</button></div></form>`;
   document.body.appendChild(dlg);
   const fill = () => dlg.querySelectorAll<HTMLInputElement>('[data-k]').forEach((inp) => {

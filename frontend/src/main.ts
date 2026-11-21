@@ -1,3 +1,4 @@
+import './colorpick';
 import {
   AreaSeries,
   BarSeries,
