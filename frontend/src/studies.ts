@@ -8,11 +8,11 @@ import { atr, bollinger, emaArr, macd, prevSession, rsi, sessionStarts, smaArr, 
  * Indicators ("studies"). Overlays draw on the price pane; oscillators get their own pane below it,
  * the way TradingView stacks them. Settings persist in localStorage.
  */
-export type Kind = 'ema' | 'sma' | 'vwap' | 'bb' | 'rsi' | 'macd' | 'stoch' | 'atr' | 'delta' | 'cvd' | 'prev' | 'asia' | 'vps' | 'vpvr';
+export type Kind = 'ema' | 'sma' | 'vwap' | 'bb' | 'rsi' | 'macd' | 'stoch' | 'atr' | 'delta' | 'cvd' | 'prev' | 'asia' | 'vps' | 'vpvr' | 'bubbles';
 
 /** Order-flow numbers per bar, supplied by the footprint module (undefined where IBKR gave no trades). */
 export const orderFlow: { bar: (t: number) => { delta: number } | undefined } = { bar: () => undefined };
-const FLOW_KINDS = new Set<Kind>(['delta', 'cvd']);
+const FLOW_KINDS = new Set<Kind>(['delta', 'cvd', 'bubbles']);
 export interface StudyCfg {
   id: string; kind: Kind; params: number[]; color: string; on: boolean;
   colors?: Record<string, string>; width?: number;
@@ -126,8 +126,11 @@ Object.assign(DEFS, {
     label: (p: number[]) => `VP session ${p[0]} ${p[1]}%`, calc: (_b: Bar[], _p: number[], c: string) => VP_OUTS(c) },
   vpvr: { title: 'Volume Profile (visible range)', pane: false, custom: true, params: [['Rows', 24], ['Value area %', 70]],
     label: (p: number[]) => `VPVR ${p[0]} ${p[1]}%`, calc: (_b: Bar[], _p: number[], c: string) => VP_OUTS(c) },
+  bubbles: { title: 'Price bubbles (order flow)', pane: false, custom: true, intradayOnly: true,
+    params: [['Minimum size', 100], ['Largest bubble (px)', 28]], label: (p: number[]) => `Bubbles ≥ ${p[0]}`,
+    calc: () => [{ name: 'Buys', color: '#22ab94', values: [] }, { name: 'Sells', color: '#f23645', values: [] }] },
 } as Partial<Record<Kind, Def>>);
-const ADD_ORDER: Kind[] = ['ema', 'sma', 'bb', 'vwap', 'prev', 'asia', 'vps', 'vpvr', 'rsi', 'macd', 'stoch', 'atr', 'delta', 'cvd'];
+const ADD_ORDER: Kind[] = ['ema', 'sma', 'bb', 'vwap', 'prev', 'asia', 'vps', 'vpvr', 'bubbles', 'rsi', 'macd', 'stoch', 'atr', 'delta', 'cvd'];
 const PALETTE = ['#2962ff', '#ff9800', '#e040fb', '#26c6da', '#ffeb3b', '#ef5350', '#66bb6a', '#ab47bc', '#7e57c2'];
 void DOWN;
 

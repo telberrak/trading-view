@@ -153,7 +153,7 @@ export function initProfiles({ chart, candles, getBars, flow }: Ctx) {
   };
   candles.attachPrimitive(primitive);
   return {
-    set(list: CustomItem[]) { items = list; requestUpdate?.(); },
+    set(list: CustomItem[]) { items = list.filter((i) => i.cfg.kind === 'vps' || i.cfg.kind === 'vpvr'); requestUpdate?.(); },
     flowChanged() { flowVersion++; requestUpdate?.(); },
   };
 }

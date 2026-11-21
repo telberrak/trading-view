@@ -45,6 +45,9 @@ The left toolbar groups the tools like TradingView. Click a group to use the too
 - Drawings can be placed in the empty space right of the last bar. Undo/redo: arrows in the top bar, Cmd/Ctrl+Z and Shift+Cmd/Ctrl+Z.
 - Saved in the browser per symbol and kept across timeframes.
 
+Every colour setting (chart settings, indicators, drawings) opens a TradingView-style picker: preset grid,
+your recent custom colours ("+" for any colour) and an opacity slider.
+
 ## Trading (live orders)
 
 - The SELL / BUY buttons at the top-left of the chart (or Shift+S / Shift+B) open an order ticket: market, limit, stop or stop-limit, DAY or GTC, and for stocks optional outside-hours.
@@ -95,6 +98,10 @@ From **Indicators**:
   the daily break for futures) or on a new day; on daily charts it is the previous bar. In its settings,
   **Sessions to show** (default 1, the current session only) draws the levels for that many recent sessions,
   each with its own previous session's levels, and **Show labels** puts the PDH/PDL/... text on each line.
+- **Price bubbles (order flow)**: on intraday charts, a green bubble where the volume bought at the ask at one
+  price within a bar reaches the **Minimum size** (contracts or shares), a red one for volume sold at the bid.
+  Bubble size grows with the volume (up to **Largest bubble**); colours and buys/sells on or off in settings.
+  It uses the same tick data as the footprint, so it covers the period that data reaches back to.
 - **Asia session High/Low**: high and low between two hours of your local time, 00:00 to 08:00 by default
   (London time on your Mac). The lines follow the range while the window is open, then hold until the
   next one. Change the hours in the indicator's settings.
