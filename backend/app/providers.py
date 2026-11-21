@@ -18,7 +18,7 @@ import json
 import logging
 import re
 import time
-from typing import AsyncIterator, Callable
+from typing import AsyncIterator, Awaitable, Callable
 
 import httpx
 
@@ -39,12 +39,13 @@ FIELDS: dict[str, list[dict]] = {
     "ig": [{"name": "apiKey", "label": "API key", "secret": True},
            {"name": "username", "label": "Username"},
            {"name": "password", "label": "Password", "secret": True},
-           {"name": "env", "label": "Environment", "options": ["live", "demo"]}],
+           {"name": "env", "label": "Environment", "options": ["live", "demo"]},
+           {"name": "history", "label": "Chart history", "options": ["from OANDA or IBKR", "from IG (uses the weekly allowance)"]}],
     "polygon": [{"name": "apiKey", "label": "API key", "secret": True}],
     "databento": [{"name": "apiKey", "label": "API key", "secret": True},
                   {"name": "dataset", "label": "Futures dataset", "placeholder": "GLBX.MDP3"}],
 }
-DEFAULTS = {"binance": {"enabled": True}, "oanda": {"env": "live"}, "ig": {"env": "live"},
+DEFAULTS = {"binance": {"enabled": True}, "oanda": {"env": "live"}, "ig": {"env": "live", "history": "from OANDA or IBKR"},
             "databento": {"dataset": "GLBX.MDP3"}}
 
 
@@ -613,19 +614,49 @@ async def test(name: str) -> str:
 class ProviderStream:
     """Chart history + live bars from a provider, with the same messages as the IBKR ChartStream."""
 
-    def __init__(self, queue: asyncio.Queue, key: str, tf: str, reply_key: str | None = None):
+    def __init__(self, queue: asyncio.Queue, key: str, tf: str, reply_key: str | None = None,
+                 ibkr_history: Callable[[str, str], Awaitable[list[dict]]] | None = None):
         self.queue, self.key, self.tf = queue, key, tf
         self.reply_key = reply_key or key
+        self.ibkr_history = ibkr_history
         self.task: asyncio.Task | None = None
+
+    async def _seed(self, p: "IG", sym: str) -> tuple[list[dict], str]:
+        """IG is used as a live feed: its history allowance (10,000 points a week) is kept for trading,
+        so the bars before now come from OANDA, else IBKR, for the same market."""
+        ident = identity(self.key)
+        if ident and ident[0] == "forex":
+            canon = ident[1]
+            with contextlib.suppress(Exception):
+                bars = await get("OANDA").history(f"{canon[:3]}_{canon[3:]}", self.tf)
+                if bars:
+                    return bars, "OANDA"
+            if self.ibkr_history:
+                with contextlib.suppress(Exception):
+                    bars = await self.ibkr_history(key_for("forex", canon, "ibkr", self.key) or "", self.tf)
+                    if bars:
+                        return bars, "IBKR"
+        return [], ""
 
     async def start(self):
         p, sym = split(self.key)
-        bars = await p.history(sym, self.tf)
+        live_only = p.name == "ig" and not str(p.cfg.get("history", "")).startswith("from IG")
+        src = ""
+        if live_only:
+            bars, src = await self._seed(p, sym)  # type: ignore[arg-type]
+            if bars:
+                p.cur[(sym, self.tf)] = dict(bars[-1])  # type: ignore[attr-defined]
+        else:
+            bars = await p.history(sym, self.tf)
         self.queue.put_nowait({"type": "history", "key": self.reply_key, "tf": self.tf, "label": p.label(sym), "bars": bars})
-        if not bars:
+        if live_only:
+            self.queue.put_nowait({"type": "notice", "message": f"IG live prices; earlier bars from {src}" if src else
+                                   "IG gives live prices only here, so this chart starts now. History comes from OANDA or IBKR for forex; "
+                                   "for other IG markets you can switch Chart history to IG in Data providers."})
+        elif not bars:
             self.queue.put_nowait({"type": "notice", "message": f"{p.title} returned no data for {sym}"})
             return
-        last = {"time": bars[-1]["time"]}
+        last = {"time": bars[-1]["time"] if bars else 0}
 
         async def run():
             async for b in p.live(sym, self.tf):
@@ -671,12 +702,24 @@ FUT_EXCH = {**dict.fromkeys(["YM", "ZB", "ZN", "ZF", "ZT", "ZC", "ZS", "ZW", "ZL
             **dict.fromkeys(["CL", "NG", "RB", "HO", "MCL", "PL", "PA"], "NYMEX"), **dict.fromkeys(["GC", "SI", "HG", "MGC", "SIL"], "COMEX")}
 
 
+# recommended defaults (2026-11-21): crypto from Binance, forex from OANDA, stocks and futures from IBKR.
+# A default whose provider is off or has no key falls back to IBKR.
+DEFAULT_ROUTES = {"stock": "ibkr", "futures": "ibkr", "forex": "oanda", "crypto": "binance"}
+
+
+def _usable(prov: str) -> bool:
+    if prov == "ibkr":
+        return True
+    c = load_cfg()[prov]
+    return bool(c.get("enabled")) and CLASSES[PREFIX[prov]](c).ready() is None
+
+
 def _routing() -> dict:
     try:
         r = json.loads(CFG_FILE.read_text()).get("_routing", {})
     except (OSError, ValueError):
         r = {}
-    return {"defaults": {t: "ibkr" for t in TYPES} | r.get("defaults", {}), "overrides": r.get("overrides", {})}
+    return {"defaults": DEFAULT_ROUTES | r.get("defaults", {}), "overrides": r.get("overrides", {})}
 
 
 def routing_cfg() -> dict:
@@ -768,7 +811,7 @@ def route(key: str) -> str:
     want = r["overrides"].get(f"{kind}:{canon}") or r["defaults"].get(kind, "ibkr")
     if want == provider_of(key):
         return key
-    if want != "ibkr" and not load_cfg()[want].get("enabled"):
+    if not _usable(want):
         return key
     return key_for(kind, canon, want, key) or key
 
@@ -780,7 +823,6 @@ def sources(key: str) -> dict:
     if not ident:
         return {"ident": None, "using": used, "options": []}
     kind, canon = ident
-    cfg = load_cfg()
-    opts = [p for p in TYPES[kind] if p == "ibkr" or cfg[p].get("enabled")]
+    opts = [p for p in TYPES[kind] if _usable(p)]
     return {"ident": f"{kind}:{canon}", "kind": kind, "using": used, "options": [{"id": p, "title": TITLES[p]} for p in opts],
             "override": _routing()["overrides"].get(f"{kind}:{canon}")}

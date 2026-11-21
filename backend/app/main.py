@@ -17,7 +17,7 @@ from .details import details as symbol_details
 from .quotes import QuoteSession
 from .alerts import AlertEngine
 from .footprint import FootprintStream
-from .streams import TIMEFRAMES, ChartStream
+from .streams import TIMEFRAMES, ChartStream, bar_dict
 from .trading import Trading
 from .paths import DIST_DIR
 
@@ -158,6 +158,17 @@ async def set_override(body: dict = Body(...)):
     return {"ok": True}
 
 
+async def ibkr_history(key: str, tf: str) -> list[dict]:
+    """IBKR bars for a key, history only (used to give IG's live feed a past)."""
+    if not ib.isConnected():
+        return []
+    r = await contracts.resolve(ib, key)
+    size, duration, _ = TIMEFRAMES[tf]
+    bars = await asyncio.wait_for(ib.reqHistoricalDataAsync(r.history, endDateTime="", durationStr=duration, barSizeSetting=size,
+                                                            whatToShow=r.what_to_show, useRTH=r.use_rth, formatDate=2, timeout=20), 25)
+    return [bar_dict(b) for b in bars or []]
+
+
 @app.websocket("/ws")
 async def chart_ws(ws: WebSocket):
     """One socket per chart. Client sends {"type":"subscribe","key":..,"tf":..,"fp":bool}
@@ -215,7 +226,7 @@ async def chart_ws(ws: WebSocket):
             real = providers.route(key)
             if providers.is_provider_key(real):
                 try:
-                    stream = providers.ProviderStream(queue, real, tf, reply_key=key)
+                    stream = providers.ProviderStream(queue, real, tf, reply_key=key, ibkr_history=ibkr_history)
                     await stream.start()
                 except Exception as e:  # noqa: BLE001
                     log.warning("provider subscribe %s: %s", real, e)

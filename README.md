@@ -62,6 +62,7 @@ existed belong to the first tab.
 
 - The SELL / BUY buttons at the top-left of the chart (or Shift+S / Shift+B) open an order ticket: market, limit, stop or stop-limit, DAY or GTC, and for stocks optional outside-hours.
 - "Review order" shows a confirmation with the account and a red LIVE ACCOUNT badge (blue PAPER when TWS is logged into paper). Nothing is sent until you press "Send BUY/SELL order".
+- **Armed** (the tick box next to BUY): when ticked, the bar turns red and orders skip the confirm screen. BUY / SELL and Shift+B / Shift+S send a market order for the quantity in the box at once, a ticket sends as soon as you submit it, and position Market/Limit buttons send the bracket straight away (unless the stop or target is on the wrong side, which still shows the screen). It is off every time the app starts.
 - Long / Short position drawings look like TradingView's: target and stop zones with labels (distance, %, ticks and amount for the quantity in the box next to BUY/SELL), an Open PnL / Qty / Risk-reward box, shading and a dashed line to the current price. Handles on the left edge move the target, entry and stop; the one on the right sets the width.
 - They can be sent as a trade: click the drawing and use **Market** or **Limit** on the bar at the top. Market enters now, Limit enters at the drawn entry price. Either way the drawn target (limit) and stop (stop order) go with it as one bracket, the exits cancelling each other when one fills, with prices snapped to the contract's tick size. Quantity comes from the box next to BUY/SELL and can be changed on the confirm screen, along with DAY or GTC. Market is blocked if the price is already past the stop or target.
 - Orders go to the account TWS / IB Gateway is logged into. Futures trade the front-month contract shown in the chart title; crypto market orders are sent IOC (an IBKR rule).
@@ -89,12 +90,11 @@ never shown again.
 | Databento | CME futures history (OHLCV) | API key. Billed per use; the chart refreshes once a minute |
 | Rithmic | not added | needs their API agreement, a conformance test and a login from an FCM or prop firm that clears through Rithmic |
 
-**Default provider per type.** At the top of the dialog, pick the provider for Stocks, Futures, Forex and Crypto.
+**Default provider per type.** Out of the box: Binance for crypto, OANDA for forex, IBKR for stocks and futures; a default that is off or has no key yet falls back to IBKR. Polygon and Databento are off until you switch them on. IG is a live feed: a chart on IG takes its earlier bars from OANDA (or IBKR) for forex, so IG's 10,000-points-a-week history allowance isn't used; for other IG markets, set Chart history to IG. At the top of the dialog you can change the provider for Stocks, Futures, Forex and Crypto.
 Any symbol of that type then loads from it. The chart title shows the source; click it to use another provider for
 just that symbol (a dot marks an override). Search lists results from every switched-on provider, default first.
 
-Limits worth knowing: order flow (footprint, bubbles, delta) needs IBKR's tick data; IG allows about 10,000
-price points a week, so its charts load about 500 bars and update by polling; Polygon and Databento are polled.
+Limits worth knowing: order flow (footprint, bubbles, delta) needs IBKR's tick data; IG updates by polling its price snapshot every 2 seconds; Polygon and Databento are polled.
 
 ## Layout
 

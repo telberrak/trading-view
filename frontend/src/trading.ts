@@ -4,8 +4,8 @@ import { shortName } from './search';
 import type { PositionOrder } from './drawings';
 
 /**
- * Buy/Sell through IBKR. Every order goes through a review screen showing the account (LIVE or PAPER)
- * before it is sent. Also: positions, open orders and fills panel, and their lines on the chart.
+ * Buy/Sell through IBKR. Orders go through a review screen showing the account (LIVE or PAPER) before
+ * they are sent, unless "Armed" is ticked on the chart (off at every start): then they go straight away. Also: positions, open orders and fills panel, and their lines on the chart.
  */
 interface OrderRow { orderId: number; account: string; symbol: string; secType: string; localSymbol: string; action: string; qty: number;
   type: string; lmtPrice: number | null; auxPrice: number | null; tif: string; status: string; filled: number | null; remaining: number | null;
@@ -31,12 +31,24 @@ export function initTrading(ctx: Ctx) {
   // ---------- chart buttons ----------
   const bar = document.createElement('div');
   bar.id = 'trade-bar';
-  bar.innerHTML = `<button class="sell"><small>SELL</small><b>–</b></button><input type="number" min="0" step="any" title="Quantity" /><button class="buy"><small>BUY</small><b>–</b></button>`;
+  bar.innerHTML = `<button class="sell"><small>SELL</small><b>–</b></button><input type="number" min="0" step="any" title="Quantity" /><button class="buy"><small>BUY</small><b>–</b></button>
+    <label class="armed" title="Armed: orders are sent at once, with no confirm screen. Off at every start."><input type="checkbox" /> Armed</label>`;
   $('chart-wrap').appendChild(bar);
   const qtyIn = bar.querySelector('input')!;
   const [sellBtn, buyBtn] = [bar.querySelector<HTMLButtonElement>('.sell')!, bar.querySelector<HTMLButtonElement>('.buy')!];
-  sellBtn.onclick = () => openTicket('SELL');
-  buyBtn.onclick = () => openTicket('BUY');
+  // not saved: every start is disarmed
+  const armedIn = bar.querySelector<HTMLInputElement>('.armed input')!;
+  const armed = () => armedIn.checked;
+  armedIn.onchange = () => bar.classList.toggle('is-armed', armedIn.checked);
+  /** Armed BUY/SELL buttons and Shift+B/S send a market order for the quantity box at once, like TradingView's one-click trading. */
+  const quick = (s: 'BUY' | 'SELL') => {
+    if (!armed()) { openTicket(s); return; }
+    const qty = Number(qtyIn.value);
+    if (!(qty > 0)) { toast('Order not sent', 'Enter a quantity above zero.', false); return; }
+    sendNow({ key: ctx.getKey(), action: s, qty, type: 'MKT', lmtPrice: null, auxPrice: null, tif: 'DAY', outsideRth: false, account: acct.accounts[0] ?? '' });
+  };
+  sellBtn.onclick = () => quick('SELL');
+  buyBtn.onclick = () => quick('BUY');
   qtyIn.onchange = () => { try { localStorage.setItem(qtyStore(ctx.getKey()), qtyIn.value); } catch { /* ignore */ } };
   function syncQty() {
     const k = ctx.getKey();
@@ -109,7 +121,7 @@ export function initTrading(ctx: Ctx) {
       if (body.lmtPrice !== null && !(body.lmtPrice > 0)) { err.textContent = 'Enter a limit price.'; return; }
       if (body.auxPrice !== null && !(body.auxPrice > 0)) { err.textContent = 'Enter a stop price.'; return; }
       qtyIn.value = String(body.qty); qtyIn.onchange?.(new Event('change'));
-      review(body);
+      if (armed()) { dlg.close(); sendNow(body); } else review(body);
     };
     if (!dlg.open) dlg.showModal();
     f('ot-qty').focus();
@@ -128,7 +140,21 @@ export function initTrading(ctx: Ctx) {
       key: k, action, qty: Number(qtyIn.value), type: o.type, lmtPrice: o.type === 'LMT' ? o.entry : null, auxPrice: null,
       tif: 'DAY', outsideRth: false, account: acct.accounts[0] ?? '', takeProfit: o.target, stopLoss: o.stop,
     };
-    review(body, problem);
+    if (armed() && !problem && body.qty > 0) sendNow(body); else review(body, problem); // a bad bracket still shows why
+  }
+
+  type OrderBody = { key: string; action: string; qty: number; type: string; lmtPrice: number | null; auxPrice: number | null; tif: string; outsideRth: boolean; account: string; takeProfit?: number; stopLoss?: number };
+  async function post(body: OrderBody) {
+    const r = await fetch('/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, confirmed: true }) });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || 'Order rejected');
+    const bracket = body.takeProfit != null && body.stopLoss != null;
+    toast(`${body.action} ${body.qty} ${shortName(body.key)} sent`, `${TYPE_NAME[body.type]}${bracket ? ' + target + stop' : ''} · order #${j.orderId} · ${j.status}`, body.action === 'BUY');
+    refresh();
+  }
+  /** Armed: no confirm screen. */
+  function sendNow(body: OrderBody) {
+    post(body).catch((e) => toast(`${body.action} ${body.qty} ${shortName(body.key)} not sent`, (e as Error).message, false));
   }
 
   function review(body: { key: string; action: string; qty: number; type: string; lmtPrice: number | null; auxPrice: number | null; tif: string; outsideRth: boolean; account: string; takeProfit?: number; stopLoss?: number }, problem = '') {
@@ -171,12 +197,8 @@ export function initTrading(ctx: Ctx) {
       send.disabled = true;
       send.textContent = 'Sending…';
       try {
-        const r = await fetch('/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, confirmed: true }) });
-        const j = await r.json();
-        if (!r.ok) throw new Error(j.error || 'Order rejected');
+        await post(body);
         dlg.close();
-        toast(`${body.action} ${body.qty} ${shortName(body.key)} sent`, `${TYPE_NAME[body.type]}${bracket ? ' + target + stop' : ''} · order #${j.orderId} · ${j.status}`, body.action === 'BUY');
-        refresh();
       } catch (e) {
         $('ot-err').textContent = (e as Error).message;
         send.disabled = false;
@@ -275,11 +297,11 @@ export function initTrading(ctx: Ctx) {
     ws.onclose = () => setTimeout(connect, 3000);
   }
 
-  // Shift+B / Shift+S open the ticket like TradingView's trading panel shortcuts.
+  // Shift+B / Shift+S: the ticket, or when armed a market order at once.
   window.addEventListener('keydown', (e) => {
     if (document.activeElement instanceof HTMLInputElement || dlg.open || !e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) return;
-    if (e.key === 'B') { e.preventDefault(); openTicket('BUY'); }
-    if (e.key === 'S') { e.preventDefault(); openTicket('SELL'); }
+    if (e.key === 'B') { e.preventDefault(); quick('BUY'); }
+    if (e.key === 'S') { e.preventDefault(); quick('SELL'); }
   });
 
   syncQty();

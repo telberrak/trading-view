@@ -307,7 +307,7 @@ function connect() {
       if (!m.bars.length) {
         const crypto = key.startsWith('CRYPTO');
         const via = sources?.using && sources.using !== 'ibkr' ? sources.options.find((o) => o.id === sources!.using)?.title : null;
-        if (via) notice(`${via} returned no data for ${shortName(key)} on ${TF_LABEL[tf]}. Check its key and plan in Data providers (the database button at the top right).`);
+        if (via === 'IG') { /* live-only feed: the server explains */ } else if (via) notice(`${via} returned no data for ${shortName(key)} on ${TF_LABEL[tf]}. Check its key and plan in Data providers (the database button at the top right).`);
         else notice(`IBKR returned no data for ${shortName(key)} on ${TF_LABEL[tf]}. ` + (crypto
           ? 'Crypto needs crypto trading permission on your IBKR account (Client Portal > Settings > Trading Permissions > Cryptocurrency).'
           : 'Check your IBKR market data subscription for this exchange.'));

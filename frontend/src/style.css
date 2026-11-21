@@ -419,3 +419,7 @@ dialog .pv-card > label { margin: 0; display: grid; grid-template-columns: 130px
 #legend .src.pick:hover { background: #2f2f2f; color: #fff; }
 .src-menu { min-width: 220px; }
 .src-menu button.on { color: #fff; }
+#trade-bar label.armed { display: flex; align-items: center; gap: 5px; padding: 0 10px; background: #161616; color: var(--muted); font-size: 12px; cursor: pointer; user-select: none; border-left: 1px solid #2a2a2a; }
+#trade-bar label.armed input { width: auto; margin: 0; accent-color: #f23645; }
+#trade-bar.is-armed { border-color: #f23645; box-shadow: 0 0 0 1px #f23645, 0 0 12px #f2364566; }
+#trade-bar.is-armed label.armed { background: #3a0d12; color: #ff6b76; font-weight: 600; }

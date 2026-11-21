@@ -33,7 +33,7 @@ export function openProviders(onSaved: () => void) {
       <div class="pv-sec">Default provider for each type</div>
       <div class="pv-defaults">${Object.entries(r.types).map(([t, opts]) => `<label>${TYPE_NAMES[t] ?? t}<select data-def="${t}">${opts.map((o) =>
         `<option value="${o}" ${r.defaults[t] === o ? 'selected' : ''} ${o !== 'ibkr' && !cfg.providers[o]?.enabled ? 'disabled' : ''}>${r.titles[o]}${o !== 'ibkr' && !cfg.providers[o]?.enabled ? ' (off)' : ''}</option>`).join('')}</select></label>`).join('')}</div>
-      <div class="pv-hint">A symbol you open loads from its type's default provider. To use another provider for one symbol, click the source name next to the chart title.</div>
+      <div class="pv-hint">A symbol you open loads from its type's default provider; one that is off or has no key yet falls back to IBKR. To use another provider for one symbol, click the source name next to the chart title.</div>
       <div class="pv-sec">Providers</div>
       ${Object.keys(ABOUT).map((name) => {
         const p = cfg.providers[name] ?? {};
@@ -72,6 +72,7 @@ export function openProviders(onSaved: () => void) {
       card.querySelectorAll<HTMLInputElement | HTMLSelectElement>('[data-f]').forEach((i) => {
         const secret = i instanceof HTMLInputElement && i.type === 'password';
         if (secret && !i.value) return; // keep the saved one
+        if (secret) v.enabled = true; // a new key means you want to use it
         v[i.dataset.f!] = i.value;
       });
       providers[card.dataset.p!] = v;
