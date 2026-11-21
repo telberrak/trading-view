@@ -55,6 +55,7 @@ export function shortName(key: string): string {
   if (p.length === 1) return p[0];
   if (p[0] === 'IG') { const e = p[1].split('.'); return e[2] || p[1]; }
   if (p[0] === 'OANDA') return p[1].replace('_', '');
+  if (p[0] === 'TRADOVATE') return `${p[1].replace(/1!$/, '')}1!`;
   if (p[0] === 'DATABENTO') return `${p[p.length - 1].split('.')[0]}1!`;
   if (p[0] === 'BINANCE' || p[0] === 'POLYGON') return p[1];
   const [sec, sym, , cur] = p;

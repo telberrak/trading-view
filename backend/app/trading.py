@@ -102,7 +102,7 @@ class Trading:
         if not self.ib.isConnected():
             raise ValueError("Not connected to IBKR")
         key = str(body["key"])
-        if key.split(":", 1)[0].upper() in ("BINANCE", "OANDA", "IG", "POLYGON", "DATABENTO"):
+        if key.split(":", 1)[0].upper() in ("BINANCE", "OANDA", "IG", "POLYGON", "DATABENTO", "TRADOVATE"):
             raise ValueError("Orders go through IBKR; this symbol comes from another data provider")
         action = str(body["action"]).upper()
         if action not in ("BUY", "SELL"):

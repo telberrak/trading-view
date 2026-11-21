@@ -88,11 +88,18 @@ never shown again.
 | IG | CFDs and spread bets | API key (My IG > Settings > API keys) plus your IG username and password; live or demo |
 | Polygon | US stocks | API key. The free plan is end-of-day data and 5 calls a minute |
 | Databento | CME futures history (OHLCV) | API key. Billed per use; the chart refreshes once a minute |
+| Tradovate / NinjaTrader | CME futures, live over Tradovate's market-data websocket, plus orders if you choose | Username, password, API key ID (cid) and secret from Tradovate's Application Settings > API Access; live or demo. Needs the API Access add-on and CME data on the account. NinjaTrader futures accounts run on Tradovate, so the same login works for them |
 | Rithmic | not added | needs their API agreement, a conformance test and a login from an FCM or prop firm that clears through Rithmic |
 
 **Default provider per type.** Out of the box: Binance for crypto, OANDA for forex, IBKR for stocks and futures; a default that is off or has no key yet falls back to IBKR. Polygon and Databento are off until you switch them on. IG is a live feed: a chart on IG takes its earlier bars from OANDA (or IBKR) for forex, so IG's 10,000-points-a-week history allowance isn't used; for other IG markets, set Chart history to IG. At the top of the dialog you can change the provider for Stocks, Futures, Forex and Crypto.
 Any symbol of that type then loads from it. The chart title shows the source; click it to use another provider for
 just that symbol (a dot marks an override). Search lists results from every switched-on provider, default first.
+
+**Tradovate orders.** With *Orders for its charts* set to "go to this Tradovate account", any chart whose data
+comes from Tradovate sends its orders (ticket, Armed one-click, and position brackets as one OSO order) to the first
+active Tradovate account; the confirm screen says TRADOVATE · LIVE or DEMO. Otherwise orders go to IBKR. Tradovate
+positions and working orders are not shown in the app's trading panel yet: see them in Tradovate or NinjaTrader.
+NinjaTrader 8's desktop connection (ATI / add-ons) is Windows-only and is not used.
 
 Limits worth knowing: order flow (footprint, bubbles, delta) needs IBKR's tick data; IG updates by polling its price snapshot every 2 seconds; Polygon and Databento are polled.
 

@@ -277,7 +277,7 @@ function loadSources() {
 }
 el('legend').addEventListener('click', (e) => {
   const chip = (e.target as HTMLElement).closest<HTMLElement>('.src.pick');
-  if (chip && sources) openSourceMenu(chip, sources, () => { subscribe(); loadSources(); watchlist?.resubscribe(); });
+  if (chip && sources) openSourceMenu(chip, sources, () => { subscribe(); loadSources(); watchlist?.resubscribe(); trading?.brokerChanged(); });
 });
 
 // ---------- notices (stay until the next symbol/timeframe change or a click) ----------
@@ -412,7 +412,7 @@ function applyColors(c: ChartColors) {
   el('chart-wrap').style.background = c.bg;
 }
 el('settings-btn').onclick = () => openChartSettings(colors, applyColors);
-el('data-btn').onclick = () => openProviders(() => { subscribe(); loadSources(); watchlist?.resubscribe(); });
+el('data-btn').onclick = () => openProviders(() => { subscribe(); loadSources(); watchlist?.resubscribe(); trading?.brokerChanged(); });
 applyColors(colors);
 
 el('shot-btn').onclick = () => {

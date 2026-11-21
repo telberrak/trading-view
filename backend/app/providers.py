@@ -1,7 +1,8 @@
-"""Data providers other than IBKR: Binance, OANDA, IG, Polygon and Databento.
+"""Data providers other than IBKR: Binance, OANDA, IG, Polygon, Databento and Tradovate (which NinjaTrader's
+futures accounts also run on).
 
 A provider symbol key starts with the provider's name, e.g. "BINANCE:BTCUSDT", "OANDA:EUR_USD",
-"IG:CS.D.EURUSD.CFD.IP", "POLYGON:AAPL", "DATABENTO:GLBX.MDP3:ES.c.0". Everything else is an IBKR key.
+"IG:CS.D.EURUSD.CFD.IP", "POLYGON:AAPL", "DATABENTO:GLBX.MDP3:ES.c.0", "TRADOVATE:ES" (front month). Everything else is an IBKR key.
 
 Each provider gives chart history, live bars (a websocket where the provider has a free one, otherwise
 polling), symbol search and a watchlist quote. Keys and passwords live in DATA_DIR/providers.json on this
@@ -42,11 +43,17 @@ FIELDS: dict[str, list[dict]] = {
            {"name": "env", "label": "Environment", "options": ["live", "demo"]},
            {"name": "history", "label": "Chart history", "options": ["from OANDA or IBKR", "from IG (uses the weekly allowance)"]}],
     "polygon": [{"name": "apiKey", "label": "API key", "secret": True}],
+    "tradovate": [{"name": "username", "label": "Username"},
+                  {"name": "password", "label": "Password", "secret": True},
+                  {"name": "cid", "label": "API key ID (cid)"},
+                  {"name": "sec", "label": "API secret", "secret": True},
+                  {"name": "env", "label": "Environment", "options": ["live", "demo"]},
+                  {"name": "orders", "label": "Orders for its charts", "options": ["go to IBKR", "go to this Tradovate account"]}],
     "databento": [{"name": "apiKey", "label": "API key", "secret": True},
                   {"name": "dataset", "label": "Futures dataset", "placeholder": "GLBX.MDP3"}],
 }
 DEFAULTS = {"binance": {"enabled": True}, "oanda": {"env": "live"}, "ig": {"env": "live", "history": "from OANDA or IBKR"},
-            "databento": {"dataset": "GLBX.MDP3"}}
+            "databento": {"dataset": "GLBX.MDP3"}, "tradovate": {"env": "demo", "orders": "go to IBKR"}}
 
 
 def load_cfg() -> dict:
@@ -555,7 +562,371 @@ class Databento(Provider):
         return f"{s} · {ds} · Databento"
 
 
-CLASSES: dict[str, type[Provider]] = {"BINANCE": Binance, "OANDA": Oanda, "IG": IG, "POLYGON": Polygon, "DATABENTO": Databento}
+# ---------- Tradovate (CME futures; NinjaTrader's futures accounts run on the same platform) ----------
+MONTHS = "FGHJKMNQUVXZ"
+
+
+class Tradovate(Provider):
+    """REST for login, contracts and orders; one market-data websocket shared by every chart and quote.
+    Bars come from md/getChart, which sends history and then keeps the subscription live."""
+    name, title = "tradovate", "Tradovate"
+    TF = {"1m": ("MinuteBar", 1), "5m": ("MinuteBar", 5), "15m": ("MinuteBar", 15), "30m": ("MinuteBar", 30), "1h": ("MinuteBar", 60),
+          "2h": ("MinuteBar", 120), "4h": ("MinuteBar", 240), "1D": ("DailyBar", 1), "1W": ("DailyBar", 1), "1M": ("DailyBar", 1)}
+
+    def __init__(self, cfg):
+        super().__init__(cfg)
+        self.token: dict | None = None
+        self.ws = None
+        self.ws_task: asyncio.Task | None = None
+        self.ws_ready: asyncio.Future | None = None
+        self.req_id = 0
+        self.pending: dict[int, asyncio.Future] = {}
+        self.charts: dict[int, asyncio.Queue] = {}
+        self.quotes: dict[int, dict] = {}  # contractId -> latest entries
+        self.quote_ids: dict[str, int] = {}  # contract name -> contractId
+        self.fronts: dict[str, tuple[float, str]] = {}
+        self.lock = asyncio.Lock()
+        self._open_subs: dict[tuple[str, str], tuple[asyncio.Queue, int]] = {}
+        self.early: dict[int, list[dict]] = {}
+        self.ticks: dict[str, float] = {}  # history() hands its live subscription to live()
+
+    def ready(self):
+        missing = [lbl for f, lbl in (("username", "username"), ("password", "password"), ("cid", "API key ID"), ("sec", "API secret"))
+                   if not self.cfg.get(f)]
+        return f"Add your Tradovate {', '.join(missing)}" if missing else None
+
+    @property
+    def base(self):
+        return f"https://{'demo' if self.cfg.get('env') == 'demo' else 'live'}.tradovateapi.com/v1"
+
+    @property
+    def md_url(self):
+        return "wss://md-demo.tradovateapi.com/v1/websocket" if self.cfg.get("env") == "demo" else "wss://md.tradovateapi.com/v1/websocket"
+
+    # ----- login -----
+    def _device_id(self) -> str:
+        import uuid
+        f = DATA_DIR / "device-id"
+        try:
+            return f.read_text().strip()
+        except OSError:
+            v = str(uuid.uuid4())
+            with contextlib.suppress(OSError):
+                f.parent.mkdir(parents=True, exist_ok=True)
+                f.write_text(v)
+            return v
+
+    async def _auth(self) -> dict:
+        async with self.lock:
+            if self.token and self.token["exp"] - time.time() > 120:
+                return self.token
+            body = {"name": self.cfg["username"], "password": self.cfg["password"], "appId": "IBKR Charts", "appVersion": "1.0",
+                    "cid": self.cfg["cid"], "sec": self.cfg["sec"], "deviceId": self._device_id()}
+            r = await client().post(f"{self.base}/auth/accesstokenrequest", json=body)
+            d = r.json() if r.content else {}
+            if r.status_code >= 400 or "errorText" in d or "accessToken" not in d:
+                if "p-ticket" in d:
+                    raise ValueError(f"Tradovate is rate-limiting logins; try again in {d.get('p-time', 60)} s")
+                raise ValueError(f"Tradovate login failed: {d.get('errorText') or r.status_code}")
+            exp = dt.datetime.fromisoformat(d["expirationTime"].replace("Z", "+00:00")).timestamp() if d.get("expirationTime") else time.time() + 4800
+            self.token = {"access": d["accessToken"], "md": d.get("mdAccessToken") or d["accessToken"], "exp": exp, "userId": d.get("userId")}
+            return self.token
+
+    async def _get(self, path: str, **params):
+        t = await self._auth()
+        r = await client().get(f"{self.base}{path}", params=params, headers={"Authorization": f"Bearer {t['access']}"})
+        if r.status_code == 401:
+            self.token = None
+            t = await self._auth()
+            r = await client().get(f"{self.base}{path}", params=params, headers={"Authorization": f"Bearer {t['access']}"})
+        r.raise_for_status()
+        return r.json()
+
+    async def _post(self, path: str, body: dict):
+        t = await self._auth()
+        r = await client().post(f"{self.base}{path}", json=body, headers={"Authorization": f"Bearer {t['access']}"})
+        d = r.json() if r.content else {}
+        if r.status_code >= 400:
+            raise ValueError(f"Tradovate: {d.get('errorText') or r.status_code}")
+        return d
+
+    # ----- contracts -----
+    async def front(self, root: str) -> str:
+        """Front-month contract name for a root (ES -> ESZ6), the nearest one not yet expired."""
+        root = root.upper()
+        if re.fullmatch(r"[A-Z0-9]+[FGHJKMNQUVXZ]\d{1,2}", root):
+            return root  # already a contract (ESZ6)
+        hit = self.fronts.get(root)
+        if hit and time.time() - hit[0] < 6 * 3600:
+            return hit[1]
+        best: tuple[str, str] | None = None
+        for c in await self._get("/contract/suggest", t=root, l=20):
+            name = c.get("name", "")
+            if not re.fullmatch(re.escape(root) + r"[FGHJKMNQUVXZ]\d{1,2}", name):
+                continue
+            m = await self._get("/contractMaturity/item", id=c["contractMaturityId"])
+            exp = m.get("expirationDate") or ""
+            if exp and exp > dt.datetime.now(dt.timezone.utc).isoformat() and (best is None or exp < best[0]):
+                best = (exp, name)
+        if not best:
+            raise ValueError(f"Tradovate has no live contract for {root}")
+        self.fronts[root] = (time.time(), best[1])
+        return best[1]
+
+    async def search(self, q):
+        out, seen = [], set()
+        for c in await self._get("/contract/suggest", t=q.upper().rstrip("!").rstrip("1"), l=12):
+            m = re.fullmatch(r"([A-Z0-9]+?)[FGHJKMNQUVXZ]\d{1,2}", c.get("name", ""))
+            if not m or m.group(1) in seen:
+                continue
+            seen.add(m.group(1))
+            out.append({"key": f"TRADOVATE:{m.group(1)}", "symbol": f"{m.group(1)}1!", "description": f"{m.group(1)} futures, front month · Tradovate",
+                        "type": "futures"})
+        return out
+
+    def label(self, sym):
+        f = self.fronts.get(sym.upper())
+        return f"{sym}1! · {f[1] if f else 'front month'} · Tradovate"
+
+    # ----- market-data websocket -----
+    async def _connect(self):
+        import websockets
+        if self.ws_ready and self.ws_ready.done() and not self.ws_ready.exception() and self.ws_task and not self.ws_task.done():
+            return
+        if self.ws_ready and not self.ws_ready.done():
+            await self.ws_ready
+            return
+        loop = asyncio.get_running_loop()
+        self.ws_ready = loop.create_future()
+        t = await self._auth()
+
+        async def run():
+            try:
+                async with websockets.connect(self.md_url, ping_interval=None, max_size=2**24) as ws:
+                    self.ws = ws
+                    beat = asyncio.create_task(self._heartbeat(ws))
+                    try:
+                        async for raw in ws:
+                            if raw == "o":
+                                await ws.send(f"authorize\n0\n\n{t['md']}")
+                            elif raw.startswith("a"):
+                                for m in json.loads(raw[1:]):
+                                    self._on(m)
+                            elif raw.startswith("c"):
+                                break
+                    finally:
+                        beat.cancel()
+            except Exception as e:  # noqa: BLE001
+                log.warning("tradovate md socket: %s", e)
+                if not self.ws_ready.done():
+                    self.ws_ready.set_exception(ValueError(f"Tradovate market data: {e}"))
+            finally:
+                self.ws = None
+                for q in self.charts.values():
+                    q.put_nowait(None)  # tell chart streams to resubscribe
+                for f in self.pending.values():
+                    if not f.done():
+                        f.set_exception(ValueError("Tradovate market data disconnected"))
+                self.pending.clear()
+                self.quote_ids.clear()
+        self.ws_task = asyncio.create_task(run())
+        await asyncio.wait_for(asyncio.shield(self.ws_ready), 15)
+
+    @staticmethod
+    async def _heartbeat(ws):
+        while True:
+            await asyncio.sleep(2.5)
+            await ws.send("[]")
+
+    def _on(self, m: dict):
+        if m.get("i") == 0 and "s" in m:  # authorize reply
+            if m["s"] == 200:
+                self.ws_ready.set_result(True)
+            else:
+                self.ws_ready.set_exception(ValueError(f"Tradovate market data login refused: {m.get('d')}"))
+            return
+        if "i" in m and m["i"] in self.pending:
+            f = self.pending.pop(m["i"])
+            if not f.done():
+                if m.get("s") == 200:
+                    f.set_result(m.get("d"))
+                else:
+                    f.set_exception(ValueError(f"Tradovate: {m.get('d')}"))
+            return
+        e, d = m.get("e"), m.get("d") or {}
+        if e == "chart":
+            for c in d.get("charts", []):
+                q = self.charts.get(c.get("id"))
+                if q is not None:
+                    q.put_nowait(c)
+                else:  # can arrive before the getChart reply has been handed back to _chart()
+                    self.early.setdefault(c.get("id"), []).append(c)
+                    if len(self.early) > 50:
+                        self.early.pop(next(iter(self.early)))
+        elif e == "md":
+            for qt in d.get("quotes", []):
+                self.quotes[qt["contractId"]] = qt.get("entries", {})
+
+    async def _request(self, endpoint: str, body: dict):
+        await self._connect()
+        self.req_id += 1
+        i = self.req_id
+        f = asyncio.get_running_loop().create_future()
+        self.pending[i] = f
+        await self.ws.send(f"{endpoint}\n{i}\n\n{json.dumps(body)}")
+        return await asyncio.wait_for(f, 15)
+
+    @staticmethod
+    def _bar(b: dict) -> dict:
+        t = dt.datetime.fromisoformat(b["timestamp"].replace("Z", "+00:00")).timestamp()
+        vol = (b.get("upVolume") or 0) + (b.get("downVolume") or 0)
+        return bar(t, b["open"], b["high"], b["low"], b["close"], vol)
+
+    async def _chart(self, sym: str, tf: str, count: int) -> tuple[asyncio.Queue, int]:
+        name = await self.front(sym)
+        kind, size = self.TF[tf]
+        d = await self._request("md/getChart", {"symbol": name, "chartDescription": {"underlyingType": kind, "elementSize": size,
+                                "elementSizeUnit": "UnderlyingUnits", "withHistogram": False}, "timeRange": {"asMuchAsElements": count}})
+        q: asyncio.Queue = asyncio.Queue()
+        for k in ("historicalId", "realtimeId"):
+            if d and d.get(k) is not None:
+                self.charts[d[k]] = q
+                for c in self.early.pop(d[k], []):
+                    q.put_nowait(c)
+        return q, (d or {}).get("historicalId") or (d or {}).get("realtimeId") or 0
+
+    async def _cancel(self, sub: int):
+        for k in [k for k, v in self.charts.items() if v is self.charts.get(sub)]:
+            self.charts.pop(k, None)
+        with contextlib.suppress(Exception):
+            await self._request("md/cancelChart", {"subscriptionId": sub})
+
+    async def history(self, sym, tf):
+        """Bars up to now; the subscription stays open and live() picks it up (see stream())."""
+        bars, _ = await self._open(sym, tf)
+        return bars
+
+    async def _open(self, sym, tf):
+        q, sub = await self._chart(sym, tf, 3000 if TF_SEC.get(tf) and TF_SEC[tf] < 86400 else 1500)
+        got: dict[int, dict] = {}
+        while True:
+            c = await asyncio.wait_for(q.get(), 30)
+            if c is None:
+                raise ValueError("Tradovate market data disconnected")
+            for b in c.get("bars", []):
+                x = self._bar(b)
+                got[x["time"]] = x
+            if c.get("eoh"):
+                break
+        bars = [got[t] for t in sorted(got)]
+        if tf in ("1W", "1M"):
+            bars = resample(bars, tf)
+        self._open_subs[(sym, tf)] = (q, sub)
+        return bars, (q, sub)
+
+    async def live(self, sym, tf):
+        key = (sym, tf)
+        while True:
+            q_sub = self._open_subs.pop(key, None)
+            if q_sub is None:
+                try:
+                    _, q_sub = await self._open(sym, tf)
+                    self._open_subs.pop(key, None)
+                except Exception as e:  # noqa: BLE001
+                    log.warning("tradovate live %s: %s", sym, e)
+                    await asyncio.sleep(5)
+                    continue
+            q, sub = q_sub
+            try:
+                while True:
+                    c = await q.get()
+                    if c is None:
+                        break  # socket dropped: resubscribe
+                    for b in c.get("bars", []):
+                        x = self._bar(b)
+                        if tf in ("1W", "1M"):
+                            x = {**x, "time": bucket(x["time"], tf)}
+                        yield x
+            finally:
+                if self.ws:
+                    asyncio.create_task(self._cancel(sub))
+
+    async def quote(self, sym):
+        name = await self.front(sym)
+        if name not in self.quote_ids:
+            d = await self._request("md/subscribeQuote", {"symbol": name})
+            cid = None
+            if isinstance(d, dict):
+                cid = d.get("contractId")
+            if cid is None:
+                c = await self._get("/contract/find", name=name)
+                cid = c["id"]
+            self.quote_ids[name] = cid
+            await asyncio.sleep(0.5)
+        e = self.quotes.get(self.quote_ids[name])
+        if not e:
+            return None
+        px = lambda k: (e.get(k) or {}).get("price")  # noqa: E731
+        last = px("Trade")
+        if last is None:
+            return None
+        prev = px("SettlementPrice")
+        return {"last": last, "bid": px("Bid"), "ask": px("Offer"), "high": px("HighPrice"), "low": px("LowPrice"), "prevClose": prev,
+                "change": last - prev if prev else None, "changePct": (last - prev) / prev * 100 if prev else None,
+                "volume": (e.get("TotalTradeVolume") or {}).get("size")}
+
+    # ----- orders -----
+    def routes_orders(self) -> bool:
+        return str(self.cfg.get("orders", "")).startswith("go to this Tradovate")
+
+    async def account(self) -> dict:
+        accts = [a for a in await self._get("/account/list") if a.get("active", True)]
+        if not accts:
+            raise ValueError("No active Tradovate account")
+        return accts[0]
+
+    async def _tick(self, sym: str) -> float:
+        root = re.sub(r"[FGHJKMNQUVXZ]\d{1,2}$", "", sym.upper())
+        if root not in self.ticks:
+            try:
+                self.ticks[root] = float((await self._get("/product/find", name=root)).get("tickSize") or 0.01)
+            except Exception:  # noqa: BLE001
+                return 0.01
+        return self.ticks[root]
+
+    async def place(self, sym: str, body: dict) -> dict:
+        """Market / limit / stop / stop-limit, or an entry with a target and a stop as one OSO bracket."""
+        a = await self.account()
+        name = await self.front(sym)
+        action = {"BUY": "Buy", "SELL": "Sell"}[str(body["action"]).upper()]
+        qty = float(body["qty"])
+        if not qty > 0 or qty != int(qty):
+            raise ValueError("Quantity must be a whole number above zero")
+        otype = {"MKT": "Market", "LMT": "Limit", "STP": "Stop", "STP LMT": "StopLimit"}[str(body.get("type", "MKT")).upper()]
+        o = {"accountSpec": a["name"], "accountId": a["id"], "action": action, "symbol": name, "orderQty": int(qty),
+             "orderType": otype, "timeInForce": "GTC" if str(body.get("tif")).upper() == "GTC" else "Day", "isAutomated": True}
+        tick = await self._tick(sym)
+        snap = lambda v: round(round(float(v) / tick) * tick, 10)  # noqa: E731  prices off the tick grid are rejected
+        if body.get("lmtPrice"):
+            o["price"] = snap(body["lmtPrice"])
+        if body.get("auxPrice"):
+            o["stopPrice"] = snap(body["auxPrice"])
+        tp, sl = body.get("takeProfit"), body.get("stopLoss")
+        if tp is not None and sl is not None:
+            exit_side = "Sell" if action == "Buy" else "Buy"
+            o["bracket1"] = {"action": exit_side, "orderType": "Limit", "price": snap(tp)}
+            o["bracket2"] = {"action": exit_side, "orderType": "Stop", "stopPrice": snap(sl)}
+            log.warning("Tradovate bracket %s %s %s %s tp=%s sl=%s acct=%s", action, qty, name, otype, tp, sl, a["name"])
+            d = await self._post("/order/placeOSO", o)
+        else:
+            log.warning("Tradovate order %s %s %s %s %s acct=%s", action, qty, name, otype, o.get("price") or o.get("stopPrice") or "", a["name"])
+            d = await self._post("/order/placeorder", o)
+        if d.get("failureReason") or d.get("failureText"):
+            raise ValueError(f"Tradovate rejected the order: {d.get('failureText') or d.get('failureReason')}")
+        return {"orderId": d.get("orderId"), "status": "Submitted", "broker": "Tradovate", "account": a["name"]}
+
+
+CLASSES: dict[str, type[Provider]] = {"BINANCE": Binance, "OANDA": Oanda, "IG": IG, "POLYGON": Polygon, "DATABENTO": Databento, "TRADOVATE": Tradovate}
 _INSTANCES: dict[str, Provider] = {}
 
 
@@ -602,6 +973,12 @@ async def test(name: str) -> str:
     _INSTANCES.pop(name, None)
     p = get(prefix)
     sample = {"binance": "BTCUSDT", "oanda": "EUR_USD", "polygon": "AAPL", "databento": "ES.c.0"}.get(name)
+    if name == "tradovate":
+        await p._auth()  # type: ignore[attr-defined]
+        a = await p.account()  # type: ignore[attr-defined]
+        front = await p.front("ES")  # type: ignore[attr-defined]
+        STATUS[name] = "Connected"
+        return f"Logged in · account {a['name']} · ES front month {front}"
     if name == "ig":
         await p._login()  # type: ignore[attr-defined]
         STATUS[name] = "Connected"
@@ -682,7 +1059,7 @@ async def quote_loop(keys: Callable[[], list[str]], put: Callable[[dict], None])
                 p, sym = split(k)
             except Exception:  # noqa: BLE001
                 continue
-            every = 60 if p.name in ("polygon", "databento") else 3
+            every = 60 if p.name in ("polygon", "databento") else 1 if p.name == "tradovate" else 3
             if now - last.get(k, 0) < every:
                 continue
             last[k] = now
@@ -695,9 +1072,9 @@ async def quote_loop(keys: Callable[[], list[str]], put: Callable[[dict], None])
 
 
 # ---------- default provider per instrument type, and per-symbol overrides ----------
-TYPES = {"stock": ["ibkr", "polygon"], "futures": ["ibkr", "databento"], "forex": ["ibkr", "oanda", "ig"], "crypto": ["ibkr", "binance"]}
-PREFIX = {"ibkr": "", "binance": "BINANCE", "oanda": "OANDA", "ig": "IG", "polygon": "POLYGON", "databento": "DATABENTO"}
-TITLES = {"ibkr": "IBKR", "binance": "Binance", "oanda": "OANDA", "ig": "IG", "polygon": "Polygon", "databento": "Databento"}
+TYPES = {"stock": ["ibkr", "polygon"], "futures": ["ibkr", "tradovate", "databento"], "forex": ["ibkr", "oanda", "ig"], "crypto": ["ibkr", "binance"]}
+PREFIX = {"ibkr": "", "binance": "BINANCE", "oanda": "OANDA", "ig": "IG", "polygon": "POLYGON", "databento": "DATABENTO", "tradovate": "TRADOVATE"}
+TITLES = {"ibkr": "IBKR", "binance": "Binance", "oanda": "OANDA", "ig": "IG", "polygon": "Polygon", "databento": "Databento", "tradovate": "Tradovate"}
 FUT_EXCH = {**dict.fromkeys(["YM", "ZB", "ZN", "ZF", "ZT", "ZC", "ZS", "ZW", "ZL", "ZM"], "CBOT"),
             **dict.fromkeys(["CL", "NG", "RB", "HO", "MCL", "PL", "PA"], "NYMEX"), **dict.fromkeys(["GC", "SI", "HG", "MGC", "SIL"], "COMEX")}
 
@@ -763,6 +1140,8 @@ def identity(key: str) -> tuple[str, str] | None:
         return ("forex", seg[2]) if e.startswith("CS.D.") and len(seg) > 2 and len(seg[2]) == 6 else None
     if head == "POLYGON":
         return "stock", parts[1]
+    if head == "TRADOVATE":
+        return "futures", re.sub(r"1!$", "", parts[1])
     if head == "DATABENTO":
         s = parts[-1]
         return "futures", s.split(".")[0]
@@ -785,6 +1164,8 @@ def key_for(kind: str, canon: str, prov: str, original: str) -> str | None:
             return f"CRYPTO:{canon[:-3]}:PAXOS:USD" if canon.endswith("USD") else None
     if prov == "polygon" and kind == "stock":
         return f"POLYGON:{canon}"
+    if prov == "tradovate" and kind == "futures":
+        return f"TRADOVATE:{canon}"
     if prov == "databento" and kind == "futures":
         return f"DATABENTO:{load_cfg()['databento'].get('dataset') or 'GLBX.MDP3'}:{canon}.c.0"
     if prov == "oanda" and kind == "forex":
@@ -826,3 +1207,15 @@ def sources(key: str) -> dict:
     opts = [p for p in TYPES[kind] if _usable(p)]
     return {"ident": f"{kind}:{canon}", "kind": kind, "using": used, "options": [{"id": p, "title": TITLES[p]} for p in opts],
             "override": _routing()["overrides"].get(f"{kind}:{canon}")}
+
+
+def order_broker(key: str) -> tuple["Tradovate", str] | None:
+    """(Tradovate, symbol) when this chart's orders should go to Tradovate, else None (IBKR)."""
+    real = route(key)
+    if not real.upper().startswith("TRADOVATE:"):
+        return None
+    with contextlib.suppress(Exception):
+        p, sym = split(real)
+        if p.routes_orders():  # type: ignore[attr-defined]
+            return p, sym  # type: ignore[return-value]
+    return None

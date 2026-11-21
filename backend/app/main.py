@@ -336,9 +336,29 @@ async def place_order(body: dict = Body(...)):
     if body.get("confirmed") is not True:
         return JSONResponse({"error": "Order must be confirmed"}, status_code=400)
     try:
+        key = str(body.get("key", ""))
+        tv = providers.order_broker(key)
+        if tv:
+            return await tv[0].place(tv[1], body)
+        if providers.is_provider_key(key):  # a chart opened from another provider's search: send its IBKR twin
+            ident = providers.identity(key)
+            twin = ident and providers.key_for(ident[0], ident[1], "ibkr", key)
+            if not twin:
+                raise ValueError("Orders go through IBKR, and this symbol has no IBKR equivalent")
+            body = {**body, "key": twin}
         return await trading.place(body)
     except (KeyError, ValueError, TypeError) as e:
         return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@app.get("/api/orders/broker")
+async def order_broker(key: str):
+    """Where an order for this chart goes, for the confirm screen."""
+    tv = providers.order_broker(key)
+    if tv:
+        env = tv[0].cfg.get("env")
+        return {"broker": "Tradovate", "live": env != "demo"}
+    return {"broker": "IBKR"}
 
 
 @app.delete("/api/orders/{order_id}")

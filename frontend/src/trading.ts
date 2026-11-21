@@ -26,6 +26,13 @@ function parseKey(k: string) { const [sec, sym] = k.split(':'); return { sec: se
 export function initTrading(ctx: Ctx) {
   let acct: Account = { accounts: [], paper: false, connected: false, orders: [], positions: [], fills: [] };
   let lines: IPriceLine[] = [];
+  /** Where this chart's orders go: IBKR, or Tradovate when its data comes from there and it is set to take orders. */
+  let broker: { broker: string; live?: boolean } = { broker: 'IBKR' };
+  const loadBroker = () => {
+    const k = ctx.getKey();
+    fetch(`/api/orders/broker?key=${encodeURIComponent(k)}`).then((r) => (r.ok ? r.json() : null)).then((b) => { if (b && k === ctx.getKey()) broker = b; }).catch(() => {});
+  };
+  loadBroker();
   const qtyStore = (k: string) => `qty:${parseKey(k).sec}`;
 
   // ---------- chart buttons ----------
@@ -149,7 +156,7 @@ export function initTrading(ctx: Ctx) {
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || 'Order rejected');
     const bracket = body.takeProfit != null && body.stopLoss != null;
-    toast(`${body.action} ${body.qty} ${shortName(body.key)} sent`, `${TYPE_NAME[body.type]}${bracket ? ' + target + stop' : ''} · order #${j.orderId} · ${j.status}`, body.action === 'BUY');
+    toast(`${body.action} ${body.qty} ${shortName(body.key)} sent`, `${j.broker ? `${j.broker} · ` : ''}${TYPE_NAME[body.type]}${bracket ? ' + target + stop' : ''} · order #${j.orderId} · ${j.status}`, body.action === 'BUY');
     refresh();
   }
   /** Armed: no confirm screen. */
@@ -163,10 +170,11 @@ export function initTrading(ctx: Ctx) {
     const px = body.lmtPrice ?? body.auxPrice ?? ctx.getLast();
     const est = px != null && sec !== 'FUT' ? `≈ ${fmt(px * body.qty)} USD` : sec === 'FUT' ? 'Futures: margin per contract applies' : '';
     const priceTxt = body.type === 'MKT' ? 'at market' : body.type === 'LMT' ? `limit ${fmt(body.lmtPrice)}` : body.type === 'STP' ? `stop ${fmt(body.auxPrice)}` : `stop ${fmt(body.auxPrice)}, limit ${fmt(body.lmtPrice)}`;
-    const live = !acct.paper;
+    const tv = broker.broker !== 'IBKR';
+    const live = tv ? !!broker.live : !acct.paper;
     dlg.innerHTML = `
       <div class="ot-review">
-        <div class="ot-acct ${live ? 'live' : 'paper'}">${live ? 'LIVE ACCOUNT' : 'PAPER ACCOUNT'} · ${body.account || '?'}</div>
+        <div class="ot-acct ${live ? 'live' : 'paper'}">${tv ? `${broker.broker.toUpperCase()} · ${live ? 'LIVE' : 'DEMO'} ACCOUNT` : `${live ? 'LIVE ACCOUNT' : 'PAPER ACCOUNT'} · ${body.account || '?'}`}</div>
         <h3>Confirm order</h3>
         <div class="ot-sum"><span class="side ${body.action === 'BUY' ? 'buy' : 'sell'}">${body.action}</span> <b>${body.qty}</b> ${avatar(shortName(body.key), 16)} <b>${shortName(body.key)}</b></div>
         <div class="ot-line">${TYPE_NAME[body.type]} order, ${priceTxt}, ${body.tif}${body.outsideRth ? ', outside RTH allowed' : ''}</div>
@@ -176,7 +184,7 @@ export function initTrading(ctx: Ctx) {
           <span>Time in force</span><select id="ot-btif"><option>DAY</option><option>GTC</option></select></div>
           <div class="ot-line muted">Target and stop are sent with the entry and cancel each other when one fills.</div>` : ''}
         <div class="ot-line muted">${est}</div>
-        ${live ? '<div class="ot-warn">This sends a real order to IBKR with real money.</div>' : ''}
+        ${live ? `<div class="ot-warn">This sends a real order to ${tv ? broker.broker : 'IBKR'} with real money.</div>` : ''}
         <div id="ot-err" class="err"></div>
         <div class="dlg-btns"><button type="button" id="ot-back">Back</button><button type="button" id="ot-send" class="primary ${body.action === 'BUY' ? 'buy' : 'sell'}">Send ${body.action} order</button></div>
       </div>`;
@@ -310,7 +318,9 @@ export function initTrading(ctx: Ctx) {
   setInterval(tickPrices, 500);
   setInterval(() => { if (!$('trading').classList.contains('hidden')) render(); }, 2000); // P&L on the current symbol
   return {
-    symbolChanged() { syncQty(); tickPrices(); refreshLines(); render(); },
+    symbolChanged() { syncQty(); tickPrices(); refreshLines(); render(); loadBroker(); },
+    /** Data source or order settings changed. */
+    brokerChanged: loadBroker,
     refresh,
     openPosition,
   };

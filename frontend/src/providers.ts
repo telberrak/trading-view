@@ -12,6 +12,7 @@ const ABOUT: Record<string, { title: string; what: string; link: string }> = {
   oanda: { title: 'OANDA', what: 'Forex, metals and index CFDs from your OANDA account. Token: OANDA hub › Manage API Access.', link: 'https://developer.oanda.com/rest-live-v20/introduction/' },
   ig: { title: 'IG', what: 'CFDs and spread bets from your IG account. API key: My IG › Settings › API keys. History is limited by IG to 10,000 price points a week, so charts load about 500 bars.', link: 'https://labs.ig.com/rest-trading-api-guide' },
   polygon: { title: 'Polygon', what: 'US stocks. The free plan gives end-of-day data and 5 calls a minute; paid plans add delayed or real-time intraday.', link: 'https://polygon.io/pricing' },
+  tradovate: { title: 'Tradovate / NinjaTrader', what: 'CME futures, live, from your Tradovate account; NinjaTrader futures accounts run on Tradovate, so the same login works if your NinjaTrader account is on that platform. Needs Tradovate\'s API Access add-on and CME data on the account. API key: Tradovate › Application Settings › API Access › Generate API Key. Can also take orders for its charts.', link: 'https://api.tradovate.com/' },
   databento: { title: 'Databento', what: 'CME futures history (ohlcv), paid per use from your credit. Charts refresh once a minute; real-time needs their live feed, not added yet.', link: 'https://databento.com/pricing' },
 };
 const TYPE_NAMES: Record<string, string> = { stock: 'Stocks', futures: 'Futures', forex: 'Forex', crypto: 'Crypto' };
