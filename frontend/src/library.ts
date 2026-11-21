@@ -31,11 +31,13 @@ export function askName(title: string, initial = ''): Promise<string | null> {
     const dlg = document.createElement('dialog');
     dlg.className = 'study-dlg';
     dlg.innerHTML = `<form method="dialog"><h3></h3><label>Name<input type="text" maxlength="60" required /></label>
-      <div class="dlg-btns"><span class="spacer"></span><button value="cancel" formnovalidate>Cancel</button><button value="ok" class="primary">Save</button></div></form>`;
+      <div class="dlg-btns"><span class="spacer"></span><button type="button" data-cancel>Cancel</button><button value="ok" class="primary">Save</button></div></form>`;
     dlg.querySelector('h3')!.textContent = title;
     const input = dlg.querySelector('input')!;
     input.value = initial;
     document.body.appendChild(dlg);
+    // Enter saves (the first submit button is the default one, so Cancel must not be a submit button)
+    dlg.querySelector<HTMLButtonElement>('[data-cancel]')!.onclick = () => dlg.close('cancel');
     dlg.addEventListener('close', () => {
       const v = input.value.trim();
       dlg.remove();

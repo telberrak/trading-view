@@ -48,11 +48,19 @@ The left toolbar groups the tools like TradingView. Click a group to use the too
 Every colour setting (chart settings, indicators, drawings) opens a TradingView-style picker: preset grid,
 your recent custom colours ("+" for any colour) and an opacity slider.
 
+## Chart tabs
+
+The strip at the very top holds chart tabs, like TradingView's. Each tab is a whole layout (1, 2 or 4 charts with
+their symbols, intervals, chart types and indicators). "+" opens a new tab on the current symbol, click to switch,
+× to close, double-click to rename (unnamed tabs show their symbol and interval). Tabs are kept between sessions.
+Drawings belong to the symbol, so they show in every tab that has that symbol.
+
 ## Trading (live orders)
 
 - The SELL / BUY buttons at the top-left of the chart (or Shift+S / Shift+B) open an order ticket: market, limit, stop or stop-limit, DAY or GTC, and for stocks optional outside-hours.
 - "Review order" shows a confirmation with the account and a red LIVE ACCOUNT badge (blue PAPER when TWS is logged into paper). Nothing is sent until you press "Send BUY/SELL order".
-- Long / Short position drawings can be sent as a trade: click the drawing and use **Market** or **Limit** on the bar at the top. Market enters now, Limit enters at the drawn entry price. Either way the drawn target (limit) and stop (stop order) go with it as one bracket, the exits cancelling each other when one fills, with prices snapped to the contract's tick size. Quantity comes from the box next to BUY/SELL and can be changed on the confirm screen, along with DAY or GTC. Market is blocked if the price is already past the stop or target.
+- Long / Short position drawings look like TradingView's: target and stop zones with labels (distance, %, ticks and amount for the quantity in the box next to BUY/SELL), an Open PnL / Qty / Risk-reward box, shading and a dashed line to the current price. Handles on the left edge move the target, entry and stop; the one on the right sets the width.
+- They can be sent as a trade: click the drawing and use **Market** or **Limit** on the bar at the top. Market enters now, Limit enters at the drawn entry price. Either way the drawn target (limit) and stop (stop order) go with it as one bracket, the exits cancelling each other when one fills, with prices snapped to the contract's tick size. Quantity comes from the box next to BUY/SELL and can be changed on the confirm screen, along with DAY or GTC. Market is blocked if the price is already past the stop or target.
 - Orders go to the account TWS / IB Gateway is logged into. Futures trade the front-month contract shown in the chart title; crypto market orders are sent IOC (an IBKR rule).
 - The wallet icon on the right rail opens positions, working orders (× cancels) and today's fills. Positions and working orders also show as lines on the chart.
 - If TWS shows its own order-precaution pop-ups, they still need clicking in TWS (or turn them off under API > Precautions).

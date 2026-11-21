@@ -86,7 +86,7 @@ button:disabled { color: #555; cursor: default; }
 /* a chart inside a layout iframe: just the chart and its own symbol/interval/type/indicator controls */
 body.embed #tools, body.embed #side, body.embed #rail, body.embed #rangebar, body.embed #alert-btn, body.embed #replay-btn,
 body.embed #undo-btn, body.embed #redo-btn, body.embed #settings-btn, body.embed #shot-btn, body.embed #full-btn,
-body.embed #conn, body.embed .menu-wrap:has(#layout-btn), body.embed #trade-bar { display: none !important; }
+body.embed #conn, body.embed #tabs, body.embed .menu-wrap:has(#layout-btn), body.embed #trade-bar { display: none !important; }
 #chart { position: absolute; inset: 0; }
 #chart-wrap.drawing #chart { cursor: crosshair; }
 
@@ -385,3 +385,15 @@ color-swatch:hover, color-swatch:focus-visible { border-color: var(--accent); ou
 .cp-pop input.cp-num { width: 30px; padding: 0; border: none; background: none; font-size: 12px; }
 .cp-pop input.cp-range { padding: 0; border: none; }
 .cp-pop { font-size: 12px; }
+
+/* chart tabs */
+#tabs { display: flex; align-items: flex-end; gap: 2px; height: 32px; padding: 0 8px; background: #0a0a0a; border-bottom: 1px solid var(--border); flex: none; overflow-x: auto; scrollbar-width: none; }
+#tabs .tab { display: inline-flex; align-items: center; gap: 6px; height: 27px; padding: 0 6px 0 12px; max-width: 200px; border-radius: 6px 6px 0 0;
+  background: transparent; color: var(--muted); font-size: 12.5px; cursor: pointer; border: 1px solid transparent; border-bottom: none; white-space: nowrap; }
+#tabs .tab:hover { background: var(--hover); color: var(--text); }
+#tabs .tab.on { background: var(--bg); color: var(--text); border-color: var(--border); }
+#tabs .tab .nm { overflow: hidden; text-overflow: ellipsis; }
+#tabs .tab .x { width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; color: var(--muted); font-size: 14px; }
+#tabs .tab .x:hover { background: #333; color: var(--text); }
+#tabs .tab-add { height: 26px; width: 28px; margin-bottom: 1px; border-radius: 4px; color: var(--muted); font-size: 18px; background: none; border: none; cursor: pointer; }
+#tabs .tab-add:hover { background: var(--hover); color: var(--text); }

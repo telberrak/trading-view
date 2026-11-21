@@ -340,7 +340,7 @@ for (const t of TIMEFRAMES) {
   tfBox.appendChild(b);
 }
 function setTf(t: TF, fromSync = false) {
-  tf = t; renderTfs(); subscribe();
+  tf = t; renderTfs(); subscribe(); window.dispatchEvent(new Event('chart-change'));
   if (!fromSync && syncOpts().interval) post({ type: 'tf', from: CHART_ID, tf: t });
 }
 function renderTfs() { [...tfBox.children].forEach((c, i) => c.classList.toggle('active', TIMEFRAMES[i] === tf)); }
@@ -508,7 +508,7 @@ if (!EMBED) {
 // ---------- symbol search + watchlist ----------
 /** Switch this chart's symbol. `fromSync`: the change came from another chart, so don't echo it back. */
 function choose(k: string, fromSync = false) {
-  key = k; details = null; loadDetails(); subscribe(); watchlist?.setActive(key); alerts?.refreshLines(); trading?.symbolChanged();
+  key = k; details = null; loadDetails(); subscribe(); watchlist?.setActive(key); alerts?.refreshLines(); trading?.symbolChanged(); window.dispatchEvent(new Event('chart-change'));
   if (!fromSync && syncOpts().symbol) post({ type: 'symbol', from: CHART_ID, key: k });
 }
 /** Symbols picked in the side panels go to whichever chart is active in the layout. */
@@ -607,6 +607,76 @@ multi?.addMenuSection((menu) => {
       location.reload();
     }, async () => { await updateLibrary((x) => { delete x.chartTemplates[name]; }); rerender(); }, 'Apply colours and chart type to all charts');
 });
+// ---------- chart tabs (main page): each tab is a whole layout, kept in localStorage ----------
+type Snap = ReturnType<typeof snapshotLayout>;
+interface Tabs { active: number; tabs: { name: string; snap: Snap | null }[] }
+function initTabs() {
+  const strip = el('tabs');
+  const load = (): Tabs => { try { const t = JSON.parse(localStorage.getItem('chartTabs') || 'null'); if (t?.tabs?.length) return t; } catch { /* new */ } return { active: 0, tabs: [{ name: '', snap: null }] }; };
+  const st = load();
+  st.active = Math.min(st.active, st.tabs.length - 1);
+  /** Unnamed tabs show their (first) chart's symbol and interval. */
+  const auto = (i: number) => {
+    if (i === st.active) return `${shortName(key)} · ${tf}`;
+    const c = st.tabs[i].snap?.charts[0];
+    try { return c?.key ? `${shortName(JSON.parse(c.key))}${c.tf ? ` · ${JSON.parse(c.tf)}` : ''}` : 'Chart'; } catch { return 'Chart'; }
+  };
+  const save = () => { try { localStorage.setItem('chartTabs', JSON.stringify(st)); } catch { /* ignore */ } };
+  const open = (snap: Snap) => {
+    for (let i = snap.charts.length; i < 4; i++) CHART_KEYS.forEach((k) => localStorage.removeItem(prefixOf(i) + k)); // leftovers from a bigger layout
+    restoreLayout(snap);
+  };
+  const go = (i: number) => {
+    if (i === st.active) return;
+    st.tabs[st.active].snap = snapshotLayout();
+    st.active = i;
+    save();
+    const snap = st.tabs[i].snap;
+    if (snap) open(snap); else location.reload();
+  };
+  const render = () => {
+    strip.textContent = '';
+    st.tabs.forEach((t, i) => {
+      const b = document.createElement('div');
+      b.className = `tab${i === st.active ? ' on' : ''}`;
+      b.title = 'Double-click to rename';
+      b.innerHTML = '<span class="nm"></span>' + (st.tabs.length > 1 ? '<span class="x" title="Close tab">×</span>' : '');
+      b.querySelector('.nm')!.textContent = t.name || auto(i);
+      b.onclick = () => go(i);
+      b.ondblclick = async () => { const n = await askName('Tab name', t.name || auto(i)); if (n !== null) { t.name = n === auto(i) ? '' : n; save(); render(); } };
+      const x = b.querySelector<HTMLElement>('.x');
+      if (x) x.onclick = (e) => {
+        e.stopPropagation();
+        const wasActive = i === st.active;
+        if (!wasActive) st.tabs[st.active].snap = snapshotLayout();
+        st.tabs.splice(i, 1);
+        if (wasActive) { st.active = Math.max(0, i - 1); save(); const s2 = st.tabs[st.active].snap; if (s2) open(s2); else location.reload(); return; }
+        if (i < st.active) st.active--;
+        save(); render();
+      };
+      strip.appendChild(b);
+    });
+    const add = document.createElement('button');
+    add.className = 'tab-add';
+    add.title = 'New tab';
+    add.textContent = '+';
+    add.onclick = () => {
+      st.tabs[st.active].snap = snapshotLayout();
+      const cur = st.tabs[st.active].snap!;
+      // a new tab starts as one chart on the current symbol and interval, with the same indicators
+      const snap: Snap = { layout: '1', sync: cur.sync, charts: [{ ...cur.charts[0] }] };
+      st.tabs.push({ name: '', snap });
+      st.active = st.tabs.length - 1;
+      save();
+      open(snap);
+    };
+    strip.appendChild(add);
+  };
+  save();
+  render();
+  window.addEventListener('chart-change', render);
+}
+if (!EMBED && multi) initTabs();
 onLibrary(() => studies.renderMenu(indMenu));
 loadLibrary();
 
