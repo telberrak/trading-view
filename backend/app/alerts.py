@@ -7,6 +7,8 @@ Each alert watches one symbol and fires once when its condition is met:
 """
 from __future__ import annotations
 
+from .paths import DATA_DIR
+
 import asyncio
 import json
 import logging
@@ -22,7 +24,7 @@ from . import contracts
 from .quotes import snapshot
 
 log = logging.getLogger("alerts")
-DATA = Path(__file__).resolve().parents[1] / "data" / "alerts.json"
+DATA = DATA_DIR / "alerts.json"
 CONDITIONS = {"crossing", "above", "below"}
 
 

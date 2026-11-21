@@ -25,11 +25,12 @@ from pathlib import Path
 from ib_async import IB
 
 from .contracts import Resolved
+from .paths import DATA_DIR
 from .streams import TIMEFRAMES
 
 log = logging.getLogger("footprint")
 
-DB = Path(__file__).resolve().parents[1] / "data" / "ticks.sqlite"
+DB = DATA_DIR / "ticks.sqlite"
 KEEP_DAYS = 10
 MAX_PAGES = 15  # x 1,000 trades of history per load
 PAGE_PAUSE = 0.5  # IBKR pacing: no more than 5 requests for one contract in 2 seconds

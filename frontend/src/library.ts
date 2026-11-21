@@ -25,8 +25,23 @@ export async function updateLibrary(change: (l: Library) => void) {
   subs.forEach((f) => f());
 }
 
-/** Ask for a name (pre-filled), or null if cancelled. */
-export function askName(title: string, initial = ''): string | null {
-  const n = window.prompt(title, initial);
-  return n && n.trim() ? n.trim().slice(0, 60) : null;
+/** Ask for a name in a small in-app dialog (window.prompt does not exist in the desktop app). */
+export function askName(title: string, initial = ''): Promise<string | null> {
+  return new Promise((resolve) => {
+    const dlg = document.createElement('dialog');
+    dlg.className = 'study-dlg';
+    dlg.innerHTML = `<form method="dialog"><h3></h3><label>Name<input type="text" maxlength="60" required /></label>
+      <div class="dlg-btns"><span class="spacer"></span><button value="cancel" formnovalidate>Cancel</button><button value="ok" class="primary">Save</button></div></form>`;
+    dlg.querySelector('h3')!.textContent = title;
+    const input = dlg.querySelector('input')!;
+    input.value = initial;
+    document.body.appendChild(dlg);
+    dlg.addEventListener('close', () => {
+      const v = input.value.trim();
+      dlg.remove();
+      resolve(dlg.returnValue === 'ok' && v ? v.slice(0, 60) : null);
+    });
+    dlg.showModal();
+    input.select();
+  });
 }

@@ -135,6 +135,32 @@ Compared with TradingView's screener: IBKR ranks by one scan at a time and retur
 there are no technical filters (RSI, moving averages…) or most fundamental columns. Quotes in the table
 are one snapshot per scan (delayed if you have no real-time subscription).
 
+## Desktop app (Mac and Windows)
+
+The app also comes as a normal desktop application: double-click it and the charts open in their own
+window. No terminal and no browser tab. Closing the window stops everything. TWS or IB Gateway still
+runs separately, with the API enabled, as before.
+
+**Get it:** on GitHub, open *Releases* and download `IBKR-Charts-…-mac-arm64.dmg` (Apple Silicon Mac) or
+`IBKR-Charts-…-windows-setup.exe`. New versions are built automatically when a version tag is pushed
+(`git tag v1.0.1 && git push origin v1.0.1`); you can also run the *Desktop app* workflow by hand from
+the Actions tab and download the files from that run.
+
+**Mac:** open the .dmg and drag *IBKR Charts* to Applications. The app isn't signed with an Apple
+developer certificate, so the first time macOS blocks it: open System Settings > Privacy & Security,
+scroll down and click *Open Anyway* (or run `xattr -dr com.apple.quarantine "/Applications/IBKR Charts.app"`).
+
+**Windows:** run the setup .exe. SmartScreen may say it protected your PC (unsigned app): click
+*More info* > *Run anyway*. The installer adds a Start menu and desktop shortcut.
+
+Your watchlists, alerts, layouts and footprint history live in the app's data folder (File > Open data
+folder). To carry over what you have from running `start.sh`, quit the app and copy the files from
+`backend/data/` into that folder.
+
+Build it yourself: `cd frontend && npm run build`, `cd backend && pip install pyinstaller && pyinstaller tv-backend.spec`,
+then `cd desktop && npm install && npx electron-builder`. For development, `cd desktop && npm start`
+uses the repo's backend and built front end.
+
 ## Bar replay
 
 Replay button > click the bar to start from. Then play/pause, step one bar (Shift+Right), pick a speed, choose a new start or exit.

@@ -1,10 +1,12 @@
 """Saved layouts and templates (indicator sets, chart styles), kept as JSON on disk."""
 from __future__ import annotations
 
+from .paths import DATA_DIR
+
 import json
 from pathlib import Path
 
-DATA = Path(__file__).resolve().parents[1] / "data" / "library.json"
+DATA = DATA_DIR / "library.json"
 KINDS = ("layouts", "indicatorTemplates", "chartTemplates")
 
 

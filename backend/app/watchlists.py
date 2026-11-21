@@ -1,6 +1,8 @@
 """Watchlists saved as JSON on disk, plus import of TWS watchlist exports."""
 from __future__ import annotations
 
+from .paths import DATA_DIR
+
 import csv
 import io
 import json
@@ -8,7 +10,7 @@ from pathlib import Path
 
 from .contracts import parse_key
 
-DATA = Path(__file__).resolve().parents[1] / "data" / "watchlists.json"
+DATA = DATA_DIR / "watchlists.json"
 
 DEFAULT = {
     "active": 0,

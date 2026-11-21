@@ -333,7 +333,7 @@ export function initStudies({ chart, getBars, isIntraday, wrap, onChange, custom
     saveBtn.innerHTML = `${icon('plus', 14)}<span>Save indicators as template…</span>`;
     saveBtn.onclick = async (e) => {
       e.stopPropagation();
-      const name = askName('Template name');
+      const name = await askName('Template name');
       if (!name) return;
       await updateLibrary((l) => { l.indicatorTemplates[name] = JSON.parse(JSON.stringify(cfgs)); });
       renderMenu(menu);

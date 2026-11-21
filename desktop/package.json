@@ -1,0 +1,72 @@
+{
+  "name": "ibkr-charts",
+  "productName": "IBKR Charts",
+  "version": "1.0.0",
+  "description": "TradingView-style charts on Interactive Brokers data",
+  "main": "main.js",
+  "private": true,
+  "author": "telberrak",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --publish never"
+  },
+  "devDependencies": {
+    "electron": "33.2.1",
+    "electron-builder": "25.1.8"
+  },
+  "build": {
+    "appId": "com.telberrak.ibkrcharts",
+    "productName": "IBKR Charts",
+    "files": [
+      "main.js",
+      "loading.html",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../backend/dist/tv-backend",
+        "to": "backend"
+      },
+      {
+        "from": "../frontend/dist",
+        "to": "frontend"
+      }
+    ],
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.finance",
+      "icon": "build/icon.png",
+      "identity": "-"
+    },
+    "dmg": {
+      "artifactName": "IBKR-Charts-${version}-mac-${arch}.dmg"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "IBKR-Charts-${version}-windows-setup.exe"
+    },
+    "linux": {
+      "target": [
+        "dir"
+      ]
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/telberrak/trading-view.git"
+  }
+}

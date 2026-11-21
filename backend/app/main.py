@@ -19,6 +19,7 @@ from .alerts import AlertEngine
 from .footprint import FootprintStream
 from .streams import TIMEFRAMES, ChartStream
 from .trading import Trading
+from .paths import DIST_DIR
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("app")
@@ -359,7 +360,7 @@ async def quotes_ws(ws: WebSocket):
 
 
 # Serve the built front end (frontend/dist) at /
-DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+DIST = DIST_DIR
 if DIST.exists():
     app.mount("/assets", StaticFiles(directory=DIST / "assets"), name="assets")
 

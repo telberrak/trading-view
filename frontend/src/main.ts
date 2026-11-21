@@ -566,7 +566,7 @@ multi?.addMenuSection((menu) => {
   const rerender = () => { multi!.closeMenu(); el('layout-btn').click(); };
   hint('Saved layouts');
   action('Save layout as…', async () => {
-    const name = askName('Layout name', localStorage.getItem('layoutName') ? JSON.parse(localStorage.getItem('layoutName')!) : '');
+    const name = await askName('Layout name', localStorage.getItem('layoutName') ? JSON.parse(localStorage.getItem('layoutName')!) : '');
     if (!name) return;
     const snap = snapshotLayout();
     await updateLibrary((l) => { l.layouts[name] = snap; });
@@ -578,7 +578,7 @@ multi?.addMenuSection((menu) => {
       async () => { await updateLibrary((x) => { delete x.layouts[name]; }); rerender(); }, 'Open this layout');
   hint('Chart style templates');
   action('Save chart style as…', async () => {
-    const name = askName('Style name');
+    const name = await askName('Style name');
     if (!name) return;
     await updateLibrary((l) => { l.chartTemplates[name] = { colors: colors, chartType }; });
     rerender();
