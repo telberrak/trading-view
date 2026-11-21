@@ -110,7 +110,7 @@ class AlertEngine:
 
     # ---------- monitoring ----------
     async def _sync_subscriptions(self):
-        wanted = {a["key"] for a in self.alerts if a["active"]}
+        wanted = {a["key"] for a in self.alerts if a["active"] and a["key"].split(":", 1)[0].upper() not in ("BINANCE", "OANDA", "IG", "POLYGON", "DATABENTO")}
         for k in [k for k in self.tickers if k not in wanted]:
             self.ib.cancelMktData(self.tickers.pop(k).contract)
         for k in wanted - set(self.tickers):

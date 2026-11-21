@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ib_async import IB, ContFuture, Contract, Crypto, Future, Stock
+from ib_async import IB, ContFuture, Contract, Crypto, Forex, Future, Stock
 
 
 @dataclass
@@ -37,6 +37,7 @@ def parse_key(key: str) -> tuple[str, str, str, str]:
 
 
 _cache: dict[str, Resolved] = {}
+FX = {"USD", "EUR", "GBP", "JPY", "CHF", "AUD", "NZD", "CAD", "SEK", "NOK", "DKK", "SGD", "HKD", "MXN", "ZAR", "PLN", "CZK", "HUF", "TRY", "CNH", "ILS"}
 
 
 async def resolve(ib: IB, key: str) -> Resolved:
@@ -58,6 +59,12 @@ async def resolve(ib: IB, key: str) -> Resolved:
         await ib.qualifyContractsAsync(front)
         r = Resolved(key, sec, q, front, "TRADES", False,
                      f"{sym}1! · {exch} ({front.lastTradeDateOrContractMonth})")
+    elif sec == "CASH":
+        c = Forex(sym + cur, exch if exch != "SMART" else "IDEALPRO")
+        [q] = await ib.qualifyContractsAsync(c) or [None]
+        if q is None:
+            raise ValueError(f"Unknown currency pair {sym}{cur}")
+        r = Resolved(key, sec, q, q, "MIDPOINT", False, f"{sym}/{cur} · IDEALPRO")
     elif sec == "CRYPTO":
         c = Crypto(sym, exch, cur)
         [q] = await ib.qualifyContractsAsync(c) or [None]
@@ -80,11 +87,16 @@ async def search(ib: IB, text: str) -> list[dict]:
             seen.add(key)
             out.append({"key": key, "symbol": label, "description": desc, "type": kind})
 
+    pair = text.upper().replace("/", "").replace(".", "")
+    if len(pair) == 6 and pair[:3] in FX and pair[3:] in FX:
+        add(f"CASH:{pair[:3]}:IDEALPRO:{pair[3:]}", pair, "Forex · IBKR IDEALPRO", "forex")
     for d in await ib.reqMatchingSymbolsAsync(text) or []:
         c = d.contract
         desc = getattr(c, "description", "") or ""
         if c.secType == "STK":
             add(f"STK:{c.symbol}:SMART:{c.currency}", c.symbol, f"{desc} {c.primaryExchange} {c.currency}".strip(), "stock")
+        if c.secType == "CASH":
+            add(f"CASH:{c.symbol}:IDEALPRO:{c.currency}", f"{c.symbol}{c.currency}", "Forex · IBKR IDEALPRO", "forex")
         if c.secType == "CRYPTO":
             add(f"CRYPTO:{c.symbol}:PAXOS:{c.currency or 'USD'}", c.symbol, "Crypto · PAXOS", "crypto")
         if "FUT" in (d.derivativeSecTypes or []) and c.secType in ("IND", "FUT"):

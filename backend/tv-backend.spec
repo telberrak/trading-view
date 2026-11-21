@@ -5,7 +5,7 @@ datas, binaries, hiddenimports = [], [], []
 for pkg in ("ib_async", "eventkit", "tzdata"):
     d, b, h = collect_all(pkg)
     datas += d; binaries += b; hiddenimports += h
-hiddenimports += collect_submodules("uvicorn") + collect_submodules("app")
+hiddenimports += collect_submodules("uvicorn") + collect_submodules("app") + collect_submodules("websockets") + collect_submodules("httpx")
 
 a = Analysis(["run.py"], pathex=["."], binaries=binaries, datas=datas, hiddenimports=hiddenimports,
              excludes=["tkinter"], noarchive=False)

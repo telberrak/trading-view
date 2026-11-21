@@ -75,7 +75,7 @@ class ChartStream:
         if keep:
             bars.updateEvent += self._on_hist_update
         else:
-            self.rt = self.ib.reqRealTimeBars(self.r.live, 5, "TRADES" if self.r.sec_type != "CRYPTO" else "MIDPOINT", False)
+            self.rt = self.ib.reqRealTimeBars(self.r.live, 5, "MIDPOINT" if self.r.sec_type in ("CRYPTO", "CASH") else "TRADES", False)
             self.rt.updateEvent += self._on_rt_update
 
     async def _history(self, size: str, duration: str, what: str, keep: bool):

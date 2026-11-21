@@ -1,4 +1,4 @@
-export interface SearchItem { key: string; symbol: string; description: string; type: string }
+export interface SearchItem { key: string; symbol: string; description: string; type: string; provider?: string }
 
 /** IBKR symbol search dropdown attached to an input. Enter on a typed key (e.g. FUT:ES:CME) uses it as-is. */
 export function attachSearch(input: HTMLInputElement, results: HTMLUListElement, onChoose: (key: string) => void) {
@@ -15,7 +15,7 @@ export function attachSearch(input: HTMLInputElement, results: HTMLUListElement,
       li.innerHTML = `<span class="sym"></span><span class="desc"></span><span class="kind"></span>`;
       (li.children[0] as HTMLElement).textContent = it.symbol;
       (li.children[1] as HTMLElement).textContent = it.description;
-      (li.children[2] as HTMLElement).textContent = it.type;
+      (li.children[2] as HTMLElement).textContent = it.provider ? `${it.type} · ${it.provider}` : it.type;
       li.onmousedown = () => choose(it.key);
       results.appendChild(li);
     });
@@ -53,6 +53,10 @@ export function attachSearch(input: HTMLInputElement, results: HTMLUListElement,
 export function shortName(key: string): string {
   const p = key.split(':');
   if (p.length === 1) return p[0];
+  if (p[0] === 'IG') { const e = p[1].split('.'); return e[2] || p[1]; }
+  if (p[0] === 'OANDA') return p[1].replace('_', '');
+  if (p[0] === 'DATABENTO') return `${p[p.length - 1].split('.')[0]}1!`;
+  if (p[0] === 'BINANCE' || p[0] === 'POLYGON') return p[1];
   const [sec, sym, , cur] = p;
   if (sec === 'FUT') return `${sym}1!`;
   if (sec === 'CRYPTO') return `${sym}${cur || 'USD'}`;

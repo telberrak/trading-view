@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from ib_async import IB
 
-from . import contracts, library, news, scanner, watchlists
+from . import contracts, library, news, providers, scanner, watchlists
 from .details import details as symbol_details
 from .quotes import QuoteSession
 from .alerts import AlertEngine
@@ -105,9 +105,57 @@ async def status():
 
 @app.get("/api/search")
 async def search(q: str):
-    if not ib.isConnected():
-        return JSONResponse({"error": "Not connected to IBKR"}, status_code=503)
-    return await contracts.search(ib, q)
+    async def ibkr():
+        if not ib.isConnected():
+            return []
+        try:
+            return [{**r, "provider": "IBKR"} for r in await contracts.search(ib, q)]
+        except Exception:  # noqa: BLE001
+            log.exception("IBKR search")
+            return []
+    a, b = await asyncio.gather(ibkr(), providers.search_all(q))
+    out = a + [{**r, "provider": providers.TITLES[providers.provider_of(r["key"])]} for r in b]
+    # the default provider for each instrument type first
+    defaults = providers.routing_cfg()["defaults"]
+    kind_of = {"stock": "stock", "futures": "futures", "forex": "forex", "crypto": "crypto"}
+    out.sort(key=lambda r: 0 if defaults.get(kind_of.get(r.get("type", ""), ""), "ibkr") == providers.provider_of(r["key"]) else 1)
+    return out[:40]
+
+
+@app.get("/api/providers")
+async def get_providers():
+    return {"providers": providers.public_cfg(), "fields": providers.FIELDS, "routing": providers.routing_cfg()}
+
+
+@app.put("/api/providers")
+async def put_providers(body: dict = Body(...)):
+    if "providers" in body:
+        providers.update_cfg(body["providers"])
+    if "defaults" in body:
+        providers.set_routing(defaults=body["defaults"])
+    return await get_providers()
+
+
+@app.post("/api/providers/{name}/test")
+async def test_provider(name: str):
+    if name not in providers.FIELDS:
+        return JSONResponse({"error": "Unknown provider"}, status_code=404)
+    try:
+        return {"ok": True, "message": await providers.test(name)}
+    except Exception as e:  # noqa: BLE001
+        providers.STATUS[name] = f"Error: {e}"
+        return JSONResponse({"ok": False, "error": str(e) or type(e).__name__}, status_code=400)
+
+
+@app.get("/api/providers/sources")
+async def data_sources(key: str):
+    return providers.sources(key)
+
+
+@app.put("/api/providers/override")
+async def set_override(body: dict = Body(...)):
+    providers.set_routing(override=(str(body["ident"]), body.get("provider") or None))
+    return {"ok": True}
 
 
 @app.websocket("/ws")
@@ -164,11 +212,23 @@ async def chart_ws(ws: WebSocket):
             if tf not in TIMEFRAMES:
                 queue.put_nowait({"type": "notice", "message": f"Unknown timeframe {tf}"})
                 continue
+            real = providers.route(key)
+            if providers.is_provider_key(real):
+                try:
+                    stream = providers.ProviderStream(queue, real, tf, reply_key=key)
+                    await stream.start()
+                except Exception as e:  # noqa: BLE001
+                    log.warning("provider subscribe %s: %s", real, e)
+                    queue.put_nowait({"type": "history", "key": key, "tf": tf, "label": real, "bars": []})
+                    queue.put_nowait({"type": "notice", "message": str(e)})
+                if msg.get("fp"):
+                    queue.put_nowait({"type": "notice", "message": "Order flow (footprint, delta, bubbles) needs IBKR tick data"})
+                continue
             if not ib.isConnected():
                 queue.put_nowait({"type": "notice", "message": "Not connected to TWS / IB Gateway"})
                 continue
             try:
-                r = await contracts.resolve(ib, key)
+                r = await contracts.resolve(ib, real)
                 current = (r, tf)
                 stream = ChartStream(ib, queue, r, tf)
                 await stream.start()
@@ -190,6 +250,11 @@ async def chart_ws(ws: WebSocket):
 
 @app.get("/api/details")
 async def get_details(key: str):
+    if providers.is_provider_key(key):
+        prov = providers.provider_of(key)
+        ident = providers.identity(key)
+        return {"key": key, "name": key.split(":", 1)[1], "exchange": providers.TITLES[prov], "secType": (ident or ("cfd",))[0].upper(),
+                "currency": "", "open": None, "industry": "", "category": "", "minTick": None, "multiplier": "", "localSymbol": ""}
     if not ib.isConnected():
         return JSONResponse({"error": "Not connected to IBKR"}, status_code=503)
     try:
@@ -232,6 +297,8 @@ async def delete_alert(alert_id: str):
 
 @app.get("/api/news")
 async def get_news(key: str):
+    if providers.is_provider_key(key):
+        return []
     if not ib.isConnected():
         return JSONResponse({"error": "Not connected to IBKR"}, status_code=503)
     try:
@@ -345,12 +412,23 @@ async def quotes_ws(ws: WebSocket):
         while True:
             await ws.send_json(await queue.get())
 
-    tasks = [asyncio.create_task(sender()), asyncio.create_task(session.run())]
+    prov_keys: dict[str, str] = {}  # browser key -> provider key
+    tasks = [asyncio.create_task(sender()), asyncio.create_task(session.run()),
+             asyncio.create_task(providers.quote_loop(lambda: list(prov_keys.values()),
+                                                      lambda m: queue.put_nowait({**m, "data": {rev.get(k, k): v for k, v in m["data"].items()}})))]
+    rev: dict[str, str] = {}
     try:
         while True:
             msg = await ws.receive_json()
-            if msg.get("type") == "symbols" and ib.isConnected():
-                await session.set_symbols([str(k).upper() for k in msg.get("keys", [])])
+            if msg.get("type") != "symbols":
+                continue
+            keys = [str(k).upper() for k in msg.get("keys", []) if not str(k).startswith("###")]
+            routed = {k: providers.route(k) for k in keys}
+            prov_keys.clear(); prov_keys.update({k: r for k, r in routed.items() if providers.is_provider_key(r)})
+            rev.clear(); rev.update({r: k for k, r in prov_keys.items()})
+            session.alias = {r: k for k, r in routed.items() if not providers.is_provider_key(r)}
+            if ib.isConnected():
+                await session.set_symbols([r for r in routed.values() if not providers.is_provider_key(r)])
     except WebSocketDisconnect:
         pass
     finally:

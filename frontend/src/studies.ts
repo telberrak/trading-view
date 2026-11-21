@@ -234,7 +234,7 @@ export function initStudies({ chart, getBars, isIntraday, wrap, onChange, custom
     return lo;
   }
   const valuesHtml = (b: { out: Output[] }, i: number, f: (v: number) => string = fmt) => b.out.filter((o) => !o.off)
-    .map((o) => `<span style="color:${o.hist ? (o.colors?.[i] ?? o.color) : o.color}">${i >= 0 && !Number.isNaN(o.values[i]) ? f(o.values[i]) : '–'}</span>`).join(' ');
+    .map((o) => `<span style="color:${o.hist ? (o.colors?.[i] ?? o.color) : o.color}">${i >= 0 && Number.isFinite(o.values[i]) ? f(o.values[i]) : '–'}</span>`).join(' ');
 
   /** Legend line for overlays, shown under the OHLC row. */
   function overlayLegend(time?: number) {

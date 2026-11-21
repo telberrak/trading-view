@@ -41,6 +41,7 @@ class QuoteSession:
         self.ib, self.queue = ib, queue
         self.tickers: dict[str, Ticker] = {}
         self.sent: dict[str, dict] = {}
+        self.alias: dict[str, str] = {}  # key loaded -> key the browser asked for (data provider routing)
 
     async def set_symbols(self, keys: list[str]):
         keys = list(dict.fromkeys(k for k in keys if not k.startswith("###")))[:90]  # stay under IBKR's ~100 market data lines
@@ -64,7 +65,7 @@ class QuoteSession:
                 q = snapshot(t)
                 if q != self.sent.get(k):
                     self.sent[k] = q
-                    changed[k] = q
+                    changed[self.alias.get(k, k)] = q
             if changed:
                 self.queue.put_nowait({"type": "quotes", "data": changed})
 

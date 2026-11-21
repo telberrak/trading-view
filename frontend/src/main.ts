@@ -25,6 +25,7 @@ import { initTrading } from './trading';
 import { initSideLayout } from './layout';
 import { loadColors, openChartSettings, withAlpha, type ChartColors } from './settings';
 import { attachSearch, shortName } from './search';
+import { openProviders, openSourceMenu, type Sources } from './providers';
 import { initWatchlist, type Details } from './watchlist';
 import { initMultiChart } from './multichart';
 import { initScreener } from './screener';
@@ -238,6 +239,7 @@ function updateBar(raw: Bar) {
 }
 
 // ---------- legend (header with name, status and OHLC) ----------
+let sources: Sources | null = null;
 const fmt = (v: number) => (Math.abs(v) >= 0.1 || v === 0 ? v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : v.toPrecision(4));
 function renderLegend(param?: MouseEventParams) {
   const lg = el('legend');
@@ -246,9 +248,10 @@ function renderLegend(param?: MouseEventParams) {
   const name = details?.name || label || shortName(key);
   const exch = details?.exchange ? ` · ${details.exchange}` : '';
   const status = details?.open == null ? '' : `<span class="status ${details.open ? '' : 'closed'}">${details.open ? 'Open' : 'Closed'}</span>`;
-  const head = `<span class="title">${avatar(shortName(key), 18)}<span class="t"></span></span>${status}`;
+  const src = sources ? `<span class="src${sources.ident && sources.options.length > 1 ? ' pick' : ''}" title="Data source${sources.ident && sources.options.length > 1 ? ': click to change for this symbol' : ''}">${sources.options.find((o) => o.id === sources!.using)?.title ?? sources.using}${sources.override ? ' •' : ''}</span>` : '';
+  const head = `<span class="title">${avatar(shortName(key), 18)}<span class="t"></span></span>${src}${status}`;
   if (!b) {
-    lg.innerHTML = `<div class="row">${head}<span class="ind">${loading ? 'Loading from IBKR…' : ''}</span></div>`;
+    lg.innerHTML = `<div class="row">${head}<span class="ind">${loading ? 'Loading…' : ''}</span></div>`;
     lg.querySelector('.t')!.textContent = `${name} · ${TF_LEGEND[tf]}${exch}`;
     return;
   }
@@ -265,6 +268,17 @@ function renderLegend(param?: MouseEventParams) {
   lg.querySelector('.t')!.textContent = `${name} · ${TF_LEGEND[tf]}${exch}`;
 }
 chart.subscribeCrosshairMove(renderLegend);
+
+// ---------- data source chip (which provider this symbol loads from) ----------
+function loadSources() {
+  const k = key;
+  fetch(`/api/providers/sources?key=${encodeURIComponent(k)}`).then((r) => (r.ok ? r.json() : null))
+    .then((s) => { if (k === key) { sources = s; renderLegend(); } }).catch(() => {});
+}
+el('legend').addEventListener('click', (e) => {
+  const chip = (e.target as HTMLElement).closest<HTMLElement>('.src.pick');
+  if (chip && sources) openSourceMenu(chip, sources, () => { subscribe(); loadSources(); watchlist?.resubscribe(); });
+});
 
 // ---------- notices (stay until the next symbol/timeframe change or a click) ----------
 function notice(msg: string) {
@@ -292,7 +306,9 @@ function connect() {
       loading = false;
       if (!m.bars.length) {
         const crypto = key.startsWith('CRYPTO');
-        notice(`IBKR returned no data for ${shortName(key)} on ${TF_LABEL[tf]}. ` + (crypto
+        const via = sources?.using && sources.using !== 'ibkr' ? sources.options.find((o) => o.id === sources!.using)?.title : null;
+        if (via) notice(`${via} returned no data for ${shortName(key)} on ${TF_LABEL[tf]}. Check its key and plan in Data providers (the database button at the top right).`);
+        else notice(`IBKR returned no data for ${shortName(key)} on ${TF_LABEL[tf]}. ` + (crypto
           ? 'Crypto needs crypto trading permission on your IBKR account (Client Portal > Settings > Trading Permissions > Cryptocurrency).'
           : 'Check your IBKR market data subscription for this exchange.'));
       }
@@ -396,6 +412,7 @@ function applyColors(c: ChartColors) {
   el('chart-wrap').style.background = c.bg;
 }
 el('settings-btn').onclick = () => openChartSettings(colors, applyColors);
+el('data-btn').onclick = () => openProviders(() => { subscribe(); loadSources(); watchlist?.resubscribe(); });
 applyColors(colors);
 
 el('shot-btn').onclick = () => {
@@ -508,7 +525,7 @@ if (!EMBED) {
 // ---------- symbol search + watchlist ----------
 /** Switch this chart's symbol. `fromSync`: the change came from another chart, so don't echo it back. */
 function choose(k: string, fromSync = false) {
-  key = k; details = null; loadDetails(); subscribe(); watchlist?.setActive(key); alerts?.refreshLines(); trading?.symbolChanged(); window.dispatchEvent(new Event('chart-change'));
+  key = k; details = null; sources = null; loadSources(); loadDetails(); subscribe(); watchlist?.setActive(key); alerts?.refreshLines(); trading?.symbolChanged(); window.dispatchEvent(new Event('chart-change'));
   if (!fromSync && syncOpts().symbol) post({ type: 'symbol', from: CHART_ID, key: k });
 }
 /** Symbols picked in the side panels go to whichever chart is active in the layout. */
@@ -528,6 +545,7 @@ function loadDetails() {
   fetch(`/api/details?key=${encodeURIComponent(k)}`).then((r) => (r.ok ? r.json() : null)).then((d) => { if (d && k === key) { details = d; renderLegend(); } }).catch(() => {});
 }
 loadDetails();
+loadSources();
 attachSearch(el<HTMLInputElement>('symbol'), el<HTMLUListElement>('results'), (k) => choose(k));
 const screener = EMBED ? null : initScreener(pick, () => chart.timeScale().applyOptions({}));
 if (!EMBED) {

@@ -73,6 +73,29 @@ existed belong to the first tab.
 - The gear icon in the top bar opens chart settings: candle body, wick and border colours, line/area colour, background, grid, scale text and volume colours (or hide volume). Changes preview live; "Defaults" resets.
 - In the Indicators menu, "settings" on any indicator changes its lengths, the colour of each of its lines and the line width.
 
+## Data providers
+
+IBKR stays the default for everything, and the only route for orders. The database button at the top right opens
+**Data providers**, where you switch other sources on, enter their keys and press **Test**. Keys and passwords are
+saved only in the app's data folder (`providers.json`, readable by your user only), never in the repo, and are
+never shown again.
+
+| Provider | What it gives | Key |
+|---|---|---|
+| Binance | Crypto spot, live over a websocket | none |
+| OANDA | Forex, metals, index CFDs | API token from the OANDA hub (Manage API Access); live or practice |
+| IG | CFDs and spread bets | API key (My IG > Settings > API keys) plus your IG username and password; live or demo |
+| Polygon | US stocks | API key. The free plan is end-of-day data and 5 calls a minute |
+| Databento | CME futures history (OHLCV) | API key. Billed per use; the chart refreshes once a minute |
+| Rithmic | not added | needs their API agreement, a conformance test and a login from an FCM or prop firm that clears through Rithmic |
+
+**Default provider per type.** At the top of the dialog, pick the provider for Stocks, Futures, Forex and Crypto.
+Any symbol of that type then loads from it. The chart title shows the source; click it to use another provider for
+just that symbol (a dot marks an override). Search lists results from every switched-on provider, default first.
+
+Limits worth knowing: order flow (footprint, bubbles, delta) needs IBKR's tick data; IG allows about 10,000
+price points a week, so its charts load about 500 bars and update by polling; Polygon and Databento are polled.
+
 ## Layout
 
 - Drag the left edge of the right sidebar to make it wider or narrower, and drag the bars between the watchlist, details, trading and alerts panels to resize them. Sizes are remembered; double-click a bar to reset it.
