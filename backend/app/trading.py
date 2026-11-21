@@ -27,6 +27,11 @@ def _num(v) -> float | None:
     return None if math.isnan(f) or f >= 1.7e308 else f
 
 
+def _round(v: float, tick: float) -> float:
+    """Snap a price to the contract's tick size, as IBKR rejects prices off the tick grid."""
+    return round(round(v / tick) * tick, 10)
+
+
 def trade_dict(t: Trade) -> dict:
     c, o, s = t.contract, t.order, t.orderStatus
     return {
@@ -51,6 +56,7 @@ class Trading:
     def __init__(self, ib: IB, broadcast: Callable[[dict], None]):
         self.ib, self.broadcast = ib, broadcast
         self._attached = False
+        self._ticks: dict[str, float] = {}
 
     def attach(self):
         if self._attached:
@@ -123,16 +129,52 @@ class Trading:
         account = str(body.get("account") or (accounts[0] if accounts else ""))
         if accounts and account not in accounts:
             raise ValueError(f"Unknown account {account}")
+        tp = _num(body.get("takeProfit"))
+        sl = _num(body.get("stopLoss"))
+        bracket = tp is not None or sl is not None
+        if bracket:
+            if otype not in ("MKT", "LMT") or tp is None or sl is None:
+                raise ValueError("A bracket needs a market or limit entry, a target and a stop")
+            ref = lmt if otype == "LMT" else None
+            if ref is not None and ((action == "BUY" and not sl < ref < tp) or (action == "SELL" and not tp < ref < sl)):
+                raise ValueError("For a long the stop must be below the entry and the target above it (the reverse for a short)")
+            tick = await self._tick(r)
+            tp, sl = _round(tp, tick), _round(sl, tick)
+            lmt = _round(lmt, tick) if lmt else lmt
+        rth = bool(body.get("outsideRth")) and r.sec_type == "STK"
         order = Order(action=action, totalQuantity=qty, orderType=otype, tif=tif, account=account,
-                      outsideRth=bool(body.get("outsideRth")) and r.sec_type == "STK", transmit=True)
+                      outsideRth=rth, transmit=not bracket)
         if lmt:
             order.lmtPrice = lmt
         if aux:
             order.auxPrice = aux
+        if bracket:
+            # parent + take-profit limit + stop-loss stop, the two exits one-cancels-other; only the last transmits
+            order.orderId = self.ib.client.getReqId()
+            exit_side = "SELL" if action == "BUY" else "BUY"
+            take = Order(action=exit_side, totalQuantity=qty, orderType="LMT", lmtPrice=tp, tif=tif, account=account,
+                         outsideRth=rth, parentId=order.orderId, transmit=False)
+            stop = Order(action=exit_side, totalQuantity=qty, orderType="STP", auxPrice=sl, tif=tif, account=account,
+                         outsideRth=rth, parentId=order.orderId, transmit=True)
+            log.warning("Placing bracket %s %s %s %s lmt=%s tp=%s sl=%s tif=%s acct=%s", action, qty,
+                        r.live.localSymbol or r.live.symbol, otype, lmt, tp, sl, tif, account)
+            trade = self.ib.placeOrder(r.live, order)
+            self.ib.placeOrder(r.live, take)
+            self.ib.placeOrder(r.live, stop)
+            return trade_dict(trade)
         log.warning("Placing %s %s %s %s lmt=%s aux=%s tif=%s acct=%s", action, qty, r.live.localSymbol or r.live.symbol,
                     otype, lmt, aux, tif, account)
         trade = self.ib.placeOrder(r.live, order)
         return trade_dict(trade)
+
+    async def _tick(self, r) -> float:
+        if r.key not in self._ticks:
+            try:
+                cds = await self.ib.reqContractDetailsAsync(r.live)
+                self._ticks[r.key] = float(cds[0].minTick) if cds and cds[0].minTick else 0.01
+            except Exception:
+                return 0.01
+        return self._ticks[r.key]
 
     def cancel(self, order_id: int) -> bool:
         for t in self.ib.openTrades():

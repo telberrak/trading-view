@@ -511,6 +511,7 @@ const pick = (k: string) => { if (!multi?.route(k)) choose(k); };
 const multi = EMBED ? null : initMultiChart(() => { sideLayout?.layout(); chart.timeScale().applyOptions({}); });
 const alerts = EMBED ? null : initAlerts({ getKey: () => key, getLast: () => allBars[allBars.length - 1]?.close ?? null, candles, onPick: pick });
 const trading = EMBED ? null : initTrading({ getKey: () => key, getLast: () => allBars[allBars.length - 1]?.close ?? null, candles, onPick: pick });
+if (trading) drawings.onPositionOrder((o) => trading.openPosition(o));
 attachSearch(el<HTMLInputElement>('symbol'), el<HTMLUListElement>('results'), (k) => choose(k));
 const screener = EMBED ? null : initScreener(pick, () => chart.timeScale().applyOptions({}));
 if (!EMBED) {

@@ -328,7 +328,12 @@ dialog input[type=color]::-webkit-color-swatch { border: 0; border-radius: 2px; 
 #draw-edit select { background: #111; color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 3px; font: inherit; font-size: 12px; }
 #draw-edit button { padding: 3px 7px; border-radius: 4px; color: var(--text); display: inline-flex; align-items: center; }
 #draw-edit button:hover { background: var(--hover); }
-#draw-edit button[hidden] { display: none; }
+#draw-edit button[hidden], #draw-edit .de-order[hidden] { display: none; }
+#draw-edit .de-order { display: inline-flex; gap: 4px; padding-right: 4px; margin-right: 2px; border-right: 1px solid var(--border); }
+#draw-edit .de-order button { background: #2962ff; color: #fff; font-size: 12px; font-weight: 600; }
+#draw-edit .de-order button:hover { background: #1e53e5; }
+.ot-legs { display: grid; grid-template-columns: 110px 1fr; align-items: center; gap: 4px 14px; margin: 8px 0; font-size: 13px; }
+.ot-legs span:nth-child(odd) { color: var(--muted, #8a8a8a); }
 
 /* screener drawer */
 #screener { position: relative; flex: none; display: flex; flex-direction: column; border-top: 4px solid #121212; background: #0b0b0b; min-height: 140px; }

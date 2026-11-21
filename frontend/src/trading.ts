@@ -1,6 +1,7 @@
 import { LineStyle, type IPriceLine, type ISeriesApi } from 'lightweight-charts';
 import { avatar } from './icons';
 import { shortName } from './search';
+import type { PositionOrder } from './drawings';
 
 /**
  * Buy/Sell through IBKR. Every order goes through a review screen showing the account (LIVE or PAPER)
@@ -114,7 +115,24 @@ export function initTrading(ctx: Ctx) {
     f('ot-qty').focus();
   }
 
-  function review(body: { key: string; action: string; qty: number; type: string; lmtPrice: number | null; auxPrice: number | null; tif: string; outsideRth: boolean; account: string }) {
+  /** From a long/short position drawing: entry (market, or limit at the drawn entry) with a take-profit and a stop-loss. */
+  function openPosition(o: PositionOrder) {
+    const k = ctx.getKey();
+    const last = ctx.getLast();
+    const action = o.long ? 'BUY' : 'SELL';
+    const ok = (ref: number) => (o.long ? o.stop < ref && ref < o.target : o.target < ref && ref < o.stop);
+    let problem = '';
+    if (!ok(o.entry)) problem = o.long ? 'For a long, the stop must be below the entry and the target above it.' : 'For a short, the stop must be above the entry and the target below it.';
+    else if (o.type === 'MKT' && last != null && !ok(last)) problem = `The price is ${fmt(last)}, already past the ${(o.long ? last <= o.stop : last >= o.stop) ? 'stop' : 'target'}. Move the drawing or use Limit.`;
+    const body = {
+      key: k, action, qty: Number(qtyIn.value), type: o.type, lmtPrice: o.type === 'LMT' ? o.entry : null, auxPrice: null,
+      tif: 'DAY', outsideRth: false, account: acct.accounts[0] ?? '', takeProfit: o.target, stopLoss: o.stop,
+    };
+    review(body, problem);
+  }
+
+  function review(body: { key: string; action: string; qty: number; type: string; lmtPrice: number | null; auxPrice: number | null; tif: string; outsideRth: boolean; account: string; takeProfit?: number; stopLoss?: number }, problem = '') {
+    const bracket = body.takeProfit != null && body.stopLoss != null;
     const { sec } = parseKey(body.key);
     const px = body.lmtPrice ?? body.auxPrice ?? ctx.getLast();
     const est = px != null && sec !== 'FUT' ? `≈ ${fmt(px * body.qty)} USD` : sec === 'FUT' ? 'Futures: margin per contract applies' : '';
@@ -126,15 +144,30 @@ export function initTrading(ctx: Ctx) {
         <h3>Confirm order</h3>
         <div class="ot-sum"><span class="side ${body.action === 'BUY' ? 'buy' : 'sell'}">${body.action}</span> <b>${body.qty}</b> ${avatar(shortName(body.key), 16)} <b>${shortName(body.key)}</b></div>
         <div class="ot-line">${TYPE_NAME[body.type]} order, ${priceTxt}, ${body.tif}${body.outsideRth ? ', outside RTH allowed' : ''}</div>
+        ${bracket ? `<div class="ot-legs"><span>Entry</span><b>${body.type === 'MKT' ? `Market (now ${fmt(ctx.getLast())})` : `Limit ${fmt(body.lmtPrice)}`}</b>
+          <span>Target</span><b class="up">Limit ${fmt(body.takeProfit)}</b><span>Stop</span><b class="down">Stop ${fmt(body.stopLoss)}</b>
+          <span>Quantity</span><input id="ot-bqty" type="number" min="0" step="any" value="${body.qty}" />
+          <span>Time in force</span><select id="ot-btif"><option>DAY</option><option>GTC</option></select></div>
+          <div class="ot-line muted">Target and stop are sent with the entry and cancel each other when one fills.</div>` : ''}
         <div class="ot-line muted">${est}</div>
         ${live ? '<div class="ot-warn">This sends a real order to IBKR with real money.</div>' : ''}
         <div id="ot-err" class="err"></div>
         <div class="dlg-btns"><button type="button" id="ot-back">Back</button><button type="button" id="ot-send" class="primary ${body.action === 'BUY' ? 'buy' : 'sell'}">Send ${body.action} order</button></div>
       </div>`;
-    $('ot-back').onclick = () => openTicket(body.action as 'BUY' | 'SELL');
+    $('ot-back').onclick = () => (bracket ? dlg.close() : openTicket(body.action as 'BUY' | 'SELL'));
     const send = $('ot-send') as HTMLButtonElement;
+    if (bracket) $('ot-back').textContent = 'Cancel';
+    if (problem) { $('ot-err').textContent = problem; send.disabled = true; }
+    if (!dlg.open) dlg.showModal();
+    dlg.querySelector<HTMLInputElement>('#ot-bqty')?.addEventListener('input', (e) => (dlg.querySelector('.ot-sum b')!.textContent = (e.target as HTMLInputElement).value));
     send.focus();
     send.onclick = async () => {
+      if (bracket) {
+        body.qty = Number(dlg.querySelector<HTMLInputElement>('#ot-bqty')!.value);
+        body.tif = dlg.querySelector<HTMLSelectElement>('#ot-btif')!.value;
+        if (!(body.qty > 0)) { $('ot-err').textContent = 'Enter a quantity above zero.'; return; }
+        qtyIn.value = String(body.qty); qtyIn.onchange?.(new Event('change'));
+      }
       send.disabled = true;
       send.textContent = 'Sending…';
       try {
@@ -142,7 +175,7 @@ export function initTrading(ctx: Ctx) {
         const j = await r.json();
         if (!r.ok) throw new Error(j.error || 'Order rejected');
         dlg.close();
-        toast(`${body.action} ${body.qty} ${shortName(body.key)} sent`, `${TYPE_NAME[body.type]} · order #${j.orderId} · ${j.status}`, body.action === 'BUY');
+        toast(`${body.action} ${body.qty} ${shortName(body.key)} sent`, `${TYPE_NAME[body.type]}${bracket ? ' + target + stop' : ''} · order #${j.orderId} · ${j.status}`, body.action === 'BUY');
         refresh();
       } catch (e) {
         $('ot-err').textContent = (e as Error).message;
@@ -257,5 +290,6 @@ export function initTrading(ctx: Ctx) {
   return {
     symbolChanged() { syncQty(); tickPrices(); refreshLines(); render(); },
     refresh,
+    openPosition,
   };
 }

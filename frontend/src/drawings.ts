@@ -7,6 +7,8 @@ import type { Bar } from './indicators';
  * the right of the last bar. Saved per symbol in localStorage.
  */
 interface Pt { t: number; p: number }
+/** A long/short position drawing turned into an order: entry, take-profit target and stop. */
+export interface PositionOrder { long: boolean; entry: number; target: number; stop: number; type: 'MKT' | 'LMT' }
 interface Drawing { id: string; kind: string; pts: Pt[]; text?: string; color: string; width?: number }
 
 /** What a tool's draw function gets: screen coordinates of its points plus small SVG helpers. */
@@ -668,6 +670,7 @@ export function initDrawings({ chart, candles, getBars, wrap }: Ctx) {
   bar.id = 'draw-edit';
   bar.hidden = true;
   bar.innerHTML = `<input type="color" title="Colour" /><select title="Line width">${[1, 1.5, 2, 3, 4].map((w) => `<option value="${w}">${w}px</option>`).join('')}</select>
+    <span class="de-order"><button data-a="mkt" title="Send this position as a market order with its stop and target">Market</button><button data-a="lmt" title="Send this position as a limit order at the entry, with its stop and target">Limit</button></span>
     <button data-a="text" title="Edit text">Aa</button><button data-a="clone" title="Clone">⧉</button><button data-a="del" title="Delete (Del)">${ICON('<path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13"/>', 16)}</button>`;
   wrap.appendChild(bar);
   const colorIn = bar.querySelector('input')!, widthIn = bar.querySelector('select')!;
@@ -683,6 +686,12 @@ export function initDrawings({ chart, candles, getBars, wrap }: Ctx) {
     c.pts = c.pts.map((p) => ({ t: p.t + step, p: p.p }));
     commit(() => items.push(c)); selected = c.id; render();
   };
+  let onOrder: ((o: PositionOrder) => void) | null = null;
+  bar.querySelectorAll<HTMLButtonElement>('[data-a=mkt], [data-a=lmt]').forEach((b) => (b.onclick = () => {
+    const d = sel();
+    if (!d || d.pts.length < 3 || !onOrder) return;
+    onOrder({ long: d.kind === 'long', entry: d.pts[0].p, target: d.pts[1].p, stop: d.pts[2].p, type: b.dataset.a === 'mkt' ? 'MKT' : 'LMT' });
+  }));
   bar.querySelector<HTMLButtonElement>('[data-a=del]')!.onclick = () => { const id = selected; selected = null; commit(() => (items = items.filter((i) => i.id !== id))); };
   function editBar() {
     const d = sel();
@@ -691,6 +700,7 @@ export function initDrawings({ chart, candles, getBars, wrap }: Ctx) {
     if (document.activeElement !== colorIn) colorIn.value = /^#[0-9a-f]{6}$/i.test(d.color) ? d.color : '#2962ff';
     widthIn.value = String(d.width ?? 1.5);
     bar.querySelector<HTMLElement>('[data-a=text]')!.hidden = !TOOLS[d.kind]?.text;
+    bar.querySelector<HTMLElement>('.de-order')!.hidden = !onOrder || (d.kind !== 'long' && d.kind !== 'short');
   }
 
   // ---------- toolbar: groups with flyouts ----------
@@ -777,5 +787,7 @@ export function initDrawings({ chart, candles, getBars, wrap }: Ctx) {
     },
     refresh: render,
     clear() { svg.textContent = ''; },
+    /** Lets long/short position drawings send their trade (Market / Limit buttons on the selection bar). */
+    onPositionOrder(fn: (o: PositionOrder) => void) { onOrder = fn; },
   };
 }

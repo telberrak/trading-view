@@ -49,6 +49,7 @@ The left toolbar groups the tools like TradingView. Click a group to use the too
 
 - The SELL / BUY buttons at the top-left of the chart (or Shift+S / Shift+B) open an order ticket: market, limit, stop or stop-limit, DAY or GTC, and for stocks optional outside-hours.
 - "Review order" shows a confirmation with the account and a red LIVE ACCOUNT badge (blue PAPER when TWS is logged into paper). Nothing is sent until you press "Send BUY/SELL order".
+- Long / Short position drawings can be sent as a trade: click the drawing and use **Market** or **Limit** on the bar at the top. Market enters now, Limit enters at the drawn entry price. Either way the drawn target (limit) and stop (stop order) go with it as one bracket, the exits cancelling each other when one fills, with prices snapped to the contract's tick size. Quantity comes from the box next to BUY/SELL and can be changed on the confirm screen, along with DAY or GTC. Market is blocked if the price is already past the stop or target.
 - Orders go to the account TWS / IB Gateway is logged into. Futures trade the front-month contract shown in the chart title; crypto market orders are sent IOC (an IBKR rule).
 - The wallet icon on the right rail opens positions, working orders (× cancels) and today's fills. Positions and working orders also show as lines on the chart.
 - If TWS shows its own order-precaution pop-ups, they still need clicking in TWS (or turn them off under API > Precautions).
