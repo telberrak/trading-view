@@ -67,6 +67,25 @@ The left toolbar groups the tools like TradingView. Click a group to use the too
 - The details panel (info icon on the right rail) shows price, day and 52-week range, open, bid/ask, volume and average volume, sector, and for futures the contract, multiplier and tick size.
 - News lists recent headlines for the symbol from the news feeds your IBKR account has (the free API feeds are usually Briefing.com and Dow Jones); click one to read it. Futures and crypto rarely have symbol news.
 
+## Footprint and order flow
+
+Pick **Footprint** in the chart type menu (1m to 4h charts). Each bar shows sell × buy volume at every
+price, a thin candle on its left, the point of control (yellow box), imbalances (bold green/red: buyers
+at a price at least 3× the sellers one row lower, and the reverse) and the bar's delta and volume
+underneath. Rows merge automatically when you zoom out; when the bars get too narrow it falls back to
+candles with the delta under each bar. Indicators adds **Volume Delta** (histogram per bar) and
+**Cumulative Volume Delta** (resets each session).
+
+What comes from IBKR and what it means:
+- Live trades come from tick-by-tick data and are classified against the bid/ask at that moment. This
+  needs a real-time market data subscription for the instrument, and uses one of your few tick-by-tick
+  slots, so it only runs for the chart you are looking at.
+- IBKR sends at most 1,000 historical trades per request, so on first load the app fetches up to 15,000
+  recent trades (the status box bottom-left says how far back that reached). Historical trades carry no
+  bid/ask, so they are classified with the tick rule (up-tick = buy, down-tick = sell).
+- Every complete minute is saved in `backend/data/ticks.sqlite` (10 days kept), so history builds up
+  while the app runs and later loads only fetch the gap.
+
 ## Bar replay
 
 Replay button > click the bar to start from. Then play/pause, step one bar (Shift+Right), pick a speed, choose a new start or exit.

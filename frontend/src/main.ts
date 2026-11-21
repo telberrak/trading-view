@@ -16,7 +16,8 @@ import { initDrawings } from './drawings';
 import { avatar, icon } from './icons';
 import { type Bar } from './indicators';
 import type { ISeriesApi } from 'lightweight-charts';
-import { initStudies } from './studies';
+import { initStudies, orderFlow } from './studies';
+import { initFootprint } from './footprint';
 import { initTrading } from './trading';
 import { initSideLayout } from './layout';
 import { loadColors, openChartSettings, withAlpha, type ChartColors } from './settings';
@@ -29,6 +30,7 @@ type TF = (typeof TIMEFRAMES)[number];
 const TF_LABEL: Record<TF, string> = { '1m': '1m', '5m': '5m', '15m': '15m', '30m': '30m', '1h': '1h', '2h': '2h', '4h': '4h', '1D': 'D', '1W': 'W', '1M': 'M' };
 const TF_LEGEND: Record<TF, string> = { '1m': '1', '5m': '5', '15m': '15', '30m': '30', '1h': '1h', '2h': '2h', '4h': '4h', '1D': '1D', '1W': '1W', '1M': '1M' };
 const INTRADAY = new Set<TF>(['1m', '5m', '15m', '30m', '1h', '2h', '4h']);
+const TF_SEC: Partial<Record<TF, number>> = { '1m': 60, '5m': 300, '15m': 900, '30m': 1800, '1h': 3600, '2h': 7200, '4h': 14400 };
 // Bottom range buttons: timeframe to switch to and how far back to show (days; 0 = everything)
 const RANGES: [string, TF, number][] = [
   ['1D', '1m', 1], ['5D', '5m', 5], ['1M', '30m', 31], ['3M', '1h', 92], ['6M', '2h', 183],
@@ -73,7 +75,7 @@ candles.priceScale().applyOptions({ scaleMargins: { top: 0.08, bottom: 0.24 } })
 // ---------- chart types ----------
 // `candles` always holds the price data (alerts, drawings and autoscale hang off it). For bar, line and
 // area styles it turns transparent and a second series on the same scale does the drawing.
-const CHART_TYPES = { candles: 'Candles', hollow: 'Hollow candles', ha: 'Heikin Ashi', bars: 'Bars', line: 'Line', area: 'Area' } as const;
+const CHART_TYPES = { candles: 'Candles', hollow: 'Hollow candles', ha: 'Heikin Ashi', bars: 'Bars', line: 'Line', area: 'Area', footprint: 'Footprint' } as const;
 type ChartType = keyof typeof CHART_TYPES;
 let chartType: ChartType = load('chartType', 'candles');
 if (!(chartType in CHART_TYPES)) chartType = 'candles';
@@ -84,15 +86,20 @@ function applyChartType() {
   const c = colors;
   const solid = { upColor: c.up, downColor: c.down, borderVisible: c.border, borderUpColor: c.borderUp, borderDownColor: c.borderDown,
     wickUpColor: c.wickUp, wickDownColor: c.wickDown, lastValueVisible: true, priceLineVisible: true };
+  footprint.setShown(chartType === 'footprint');
+  volume.applyOptions({ visible: colors.volume && chartType !== 'footprint' });
+  candles.priceScale().applyOptions({ scaleMargins: { top: 0.08, bottom: colors.volume && chartType !== 'footprint' ? 0.24 : 0.08 } });
   if (chartType === 'candles' || chartType === 'ha') candles.applyOptions(solid);
   else if (chartType === 'hollow') candles.applyOptions({ ...solid, upColor: CLEAR, borderVisible: true, borderUpColor: c.border ? c.borderUp : c.up, borderDownColor: c.border ? c.borderDown : c.down });
   else {
-    candles.applyOptions({ upColor: CLEAR, downColor: CLEAR, borderVisible: false, wickUpColor: CLEAR, wickDownColor: CLEAR, lastValueVisible: false, priceLineVisible: false });
-    if (chartType === 'bars') styleSeries = chart.addSeries(BarSeries, { upColor: c.up, downColor: c.down, thinBars: false });
+    const fpType = chartType === 'footprint'; // footprint draws its own candles; keep the price line
+    candles.applyOptions({ upColor: CLEAR, downColor: CLEAR, borderVisible: false, wickUpColor: CLEAR, wickDownColor: CLEAR, lastValueVisible: fpType, priceLineVisible: fpType });
+    if (fpType) { /* drawn by the footprint primitive */ } else if (chartType === 'bars') styleSeries = chart.addSeries(BarSeries, { upColor: c.up, downColor: c.down, thinBars: false });
     else if (chartType === 'line') styleSeries = chart.addSeries(LineSeries, { color: c.line, lineWidth: 2 });
     else styleSeries = chart.addSeries(AreaSeries, { lineColor: c.line, topColor: withAlpha(c.line, 0.35), bottomColor: withAlpha(c.line, 0), lineWidth: 2 });
   }
   el('ct-btn').innerHTML = icon(`ct-${chartType}`);
+  syncFlow();
   el('ct-btn').title = `Chart type: ${CHART_TYPES[chartType]}`;
   setMain();
 }
@@ -138,8 +145,42 @@ const volBar = (b: Bar) => ({ time: b.time as UTCTimestamp, value: b.volume,
   color: withAlpha(b.close >= b.open ? colors.volUp : colors.volDown, 0.75) });
 
 const studies = initStudies({ chart, getBars: () => bars, isIntraday: () => INTRADAY.has(tf), wrap: el('chart-wrap'),
-  onChange: () => renderLegend() });
+  onChange: () => { renderLegend(); syncFlow(); } });
 function computeIndicators() { studies.compute(); }
+
+// ---------- footprint / order flow ----------
+let fpRedrawPending = 0;
+const footprint = initFootprint({ chart, candles, getBars: () => bars, shift, barSeconds: () => TF_SEC[tf] ?? null,
+  colors: () => ({ up: colors.up, down: colors.down, wickUp: colors.wickUp, wickDown: colors.wickDown, text: colors.text }),
+  onData: () => { // order-flow indicators follow the data, at most a few times a second
+    if (fpRedrawPending) return;
+    fpRedrawPending = window.setTimeout(() => { fpRedrawPending = 0; if (studies.needsFlow()) { computeIndicators(); renderLegend(); } }, 250);
+  } });
+orderFlow.bar = (t) => footprint.bar(t);
+let flowOn = false;
+const wantFlow = () => INTRADAY.has(tf) && (chartType === 'footprint' || studies.needsFlow());
+/** Ask the server for order-flow data only while the footprint or a delta indicator is showing. */
+function syncFlow() {
+  const want = wantFlow();
+  const st = el('fp-status');
+  if (chartType === 'footprint' && !INTRADAY.has(tf)) { st.hidden = false; st.textContent = 'Footprint works on 1m to 4h charts; showing candles.'; }
+  else if (!want) st.hidden = true;
+  if (want === flowOn) return;
+  flowOn = want;
+  if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'footprint', on: want }));
+  if (want) { st.hidden = false; st.textContent = 'Order flow: loading trades from IBKR…'; }
+}
+function fpStatus(m: { status?: string; note?: string; reach?: number | null }) {
+  if (!m.status || !flowOn) return;
+  const st = el('fp-status');
+  st.hidden = false;
+  if (m.status === 'loading') st.textContent = 'Order flow: loading trades from IBKR…';
+  else if (m.note) st.textContent = `Order flow: ${m.note}`;
+  else if (m.reach) {
+    const d = new Date(m.reach * 1000);
+    st.textContent = `Order flow from ${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} ${d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} (IBKR history limit) · live`;
+  } else st.textContent = 'Order flow · live';
+}
 
 function applyRange(days: number) {
   if (!bars.length) return;
@@ -240,6 +281,11 @@ function connect() {
       }
       setHistory(m.bars);
     } else if (m.type === 'bar') updateBar(m.bar);
+    else if (m.type === 'fp' || m.type === 'fp_up') {
+      if (m.key !== key || m.tf !== tf) return;
+      if (m.type === 'fp') footprint.snapshot(m); else footprint.patch(m);
+      fpStatus(m);
+    }
     else if (m.type === 'notice') notice(m.code ? `IBKR ${m.code}: ${m.message}` : m.message);
   };
   ws.onclose = () => setTimeout(connect, 2000);
@@ -260,7 +306,12 @@ function subscribe() {
   renderLegend();
   el<HTMLInputElement>('symbol').value = shortName(key);
   document.title = `${shortName(key)} · Charts`;
-  if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'subscribe', key, tf }));
+  footprint.reset();
+  flowOn = wantFlow();
+  el('fp-status').hidden = true;
+  if (flowOn) fpStatus({ status: 'loading' });
+  syncFlow();
+  if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'subscribe', key, tf, fp: flowOn }));
 }
 
 // ---------- timeframes ----------
@@ -319,8 +370,7 @@ function applyColors(c: ChartColors) {
   colors = c;
   chart.applyOptions({ layout: { background: { type: ColorType.Solid, color: c.bg }, textColor: c.text },
     grid: { vertLines: { color: c.grid, visible: c.gridOn }, horzLines: { color: c.grid, visible: c.gridOn } } });
-  volume.applyOptions({ visible: c.volume });
-  candles.priceScale().applyOptions({ scaleMargins: { top: 0.08, bottom: c.volume ? 0.24 : 0.08 } });
+  volume.applyOptions({ visible: c.volume && chartType !== 'footprint' }); // footprint shows volume per bar itself
   volume.setData(bars.map(volBar));
   applyChartType();
   el('chart-wrap').style.background = c.bg;

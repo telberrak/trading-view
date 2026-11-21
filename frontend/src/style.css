@@ -88,6 +88,9 @@ button:disabled { color: #555; cursor: default; }
 #notice { position: absolute; bottom: 36px; left: 50%; transform: translateX(-50%); z-index: 4; cursor: pointer;
   background: #1e1e1e; border: 1px solid var(--border); border-radius: 6px; padding: 8px 14px; color: #f7a600; max-width: 70%; }
 
+#fp-status { position: absolute; left: 8px; bottom: 34px; z-index: 3; pointer-events: none; font-size: 11px; color: #9a9a9a;
+  background: rgba(20,20,20,.85); border: 1px solid #262626; border-radius: 4px; padding: 3px 8px; }
+
 /* bottom range bar */
 #rangebar { height: 34px; flex: none; display: flex; align-items: center; padding: 0 8px; border-top: 4px solid #121212; }
 #rangebar .group button { padding: 4px 7px; font-size: 13px; }

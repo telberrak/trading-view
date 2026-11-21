@@ -1,4 +1,5 @@
 import { HistogramSeries, LineSeries, LineStyle, type IChartApi, type ISeriesApi, type UTCTimestamp } from 'lightweight-charts';
+import { compact } from './footprint';
 import { icon } from './icons';
 import { atr, bollinger, emaArr, macd, rsi, smaArr, stochastic, vwap, type Bar } from './indicators';
 
@@ -6,7 +7,11 @@ import { atr, bollinger, emaArr, macd, rsi, smaArr, stochastic, vwap, type Bar }
  * Indicators ("studies"). Overlays draw on the price pane; oscillators get their own pane below it,
  * the way TradingView stacks them. Settings persist in localStorage.
  */
-export type Kind = 'ema' | 'sma' | 'vwap' | 'bb' | 'rsi' | 'macd' | 'stoch' | 'atr';
+export type Kind = 'ema' | 'sma' | 'vwap' | 'bb' | 'rsi' | 'macd' | 'stoch' | 'atr' | 'delta' | 'cvd';
+
+/** Order-flow numbers per bar, supplied by the footprint module (undefined where IBKR gave no trades). */
+export const orderFlow: { bar: (t: number) => { delta: number } | undefined } = { bar: () => undefined };
+const FLOW_KINDS = new Set<Kind>(['delta', 'cvd']);
 export interface StudyCfg { id: string; kind: Kind; params: number[]; color: string; on: boolean; colors?: Record<string, string>; width?: number }
 
 /** Apply the user's colour choices (per output line) on top of the defaults. */
@@ -22,10 +27,12 @@ interface Def {
   intradayOnly?: boolean;
   levels?: number[];
   label: (p: number[]) => string;
+  format?: (v: number) => string;
   calc: (bars: Bar[], p: number[], color: string) => Output[];
 }
 
 const UP = '#22ab94', DOWN = '#f23645';
+const compactFmt = (v: number) => compact(Math.round(v * 100) / 100);
 export const DEFS: Record<Kind, Def> = {
   ema: { title: 'Moving Average Exponential', pane: false, params: [['Length', 9]], label: (p) => `EMA ${p[0]}`,
     calc: (b, p, c) => [{ name: 'EMA', color: c, values: emaArr(b.map((x) => x.close), p[0]) }] },
@@ -50,8 +57,30 @@ export const DEFS: Record<Kind, Def> = {
     calc: (b, p, c) => { const r = stochastic(b, p[0], p[1], p[2]); return [{ name: '%K', color: c, values: r.k }, { name: '%D', color: '#ff6d00', values: r.d }]; } },
   atr: { title: 'Average True Range', pane: true, params: [['Length', 14]], label: (p) => `ATR ${p[0]}`,
     calc: (b, p, c) => [{ name: 'ATR', color: c, values: atr(b, p[0]) }] },
+  delta: { title: 'Volume Delta (order flow)', pane: true, params: [], intradayOnly: true, levels: [0], label: () => 'Volume Delta', format: compactFmt,
+  calc: (b) => {
+    const values = b.map((x) => orderFlow.bar(x.time)?.delta ?? NaN);
+    return [{ name: 'Delta', color: UP, values, hist: true, colors: values.map((v) => (v >= 0 ? UP : DOWN)) }];
+  } },
+  cvd: { title: 'Cumulative Volume Delta (order flow)', pane: true, params: [], intradayOnly: true, levels: [0], label: () => 'CVD', format: compactFmt,
+  calc: (b, _p, c) => {
+    // resets each session, like VWAP (a gap of 45 min or more, or a new day)
+    const values: number[] = [];
+    let sum = 0, lastReset = -Infinity;
+    for (let i = 0; i < b.length; i++) {
+      const prev = b[i - 1];
+      const gap = prev ? b[i].time - prev.time : Infinity;
+      const newDay = prev ? Math.floor(b[i].time / 86400) !== Math.floor(prev.time / 86400) : true;
+      if (gap >= 45 * 60 || (newDay && b[i].time - lastReset > 20 * 3600)) { sum = 0; lastReset = b[i].time; }
+      const d = orderFlow.bar(b[i].time)?.delta;
+      if (d === undefined) { values.push(NaN); continue; }
+      sum += d;
+      values.push(sum);
+    }
+    return [{ name: 'CVD', color: c, values }];
+  } },
 };
-const ADD_ORDER: Kind[] = ['ema', 'sma', 'bb', 'vwap', 'rsi', 'macd', 'stoch', 'atr'];
+const ADD_ORDER: Kind[] = ['ema', 'sma', 'bb', 'vwap', 'rsi', 'macd', 'stoch', 'atr', 'delta', 'cvd'];
 const PALETTE = ['#2962ff', '#ff9800', '#e040fb', '#26c6da', '#ffeb3b', '#ef5350', '#66bb6a', '#ab47bc', '#7e57c2'];
 void DOWN;
 
@@ -140,8 +169,8 @@ export function initStudies({ chart, getBars, isIntraday, wrap, onChange }: Ctx)
     while (lo < hi) { const m = (lo + hi + 1) >> 1; if (bars[m].time <= time) lo = m; else hi = m - 1; }
     return lo;
   }
-  const valuesHtml = (b: { out: Output[] }, i: number) => b.out
-    .map((o) => `<span style="color:${o.hist ? (o.colors?.[i] ?? o.color) : o.color}">${i >= 0 && !Number.isNaN(o.values[i]) ? fmt(o.values[i]) : '–'}</span>`).join(' ');
+  const valuesHtml = (b: { out: Output[] }, i: number, f: (v: number) => string = fmt) => b.out
+    .map((o) => `<span style="color:${o.hist ? (o.colors?.[i] ?? o.color) : o.color}">${i >= 0 && !Number.isNaN(o.values[i]) ? f(o.values[i]) : '–'}</span>`).join(' ');
 
   /** Legend line for overlays, shown under the OHLC row. */
   function overlayLegend(time?: number) {
@@ -163,7 +192,7 @@ export function initStudies({ chart, getBars, isIntraday, wrap, onChange }: Ctx)
       let top = 0;
       for (let k = 0; k < idx && k < panes.length; k++) top += panes[k].getHeight() + 1; // 1px pane separator
       div.style.top = `${top + 4}px`;
-      div.innerHTML = `<span class="name">${DEFS[c.kind].label(c.params)}</span> ${valuesHtml(built.get(c.id)!, i)}`;
+      div.innerHTML = `<span class="name">${DEFS[c.kind].label(c.params)}</span> ${valuesHtml(built.get(c.id)!, i, DEFS[c.kind].format)}`;
     });
   }
 
@@ -251,5 +280,7 @@ export function initStudies({ chart, getBars, isIntraday, wrap, onChange }: Ctx)
     }
   }
 
-  return { compute, overlayLegend, paneLegends, renderMenu };
+  /** True when a visible indicator needs order-flow (footprint) data. */
+  const needsFlow = () => visible().some((c) => FLOW_KINDS.has(c.kind));
+  return { compute, overlayLegend, paneLegends, renderMenu, needsFlow };
 }

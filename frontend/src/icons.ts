@@ -35,6 +35,7 @@ const P: Record<string, string> = {
   'ct-ha': '<path d="M8 4v3M8 15v4M16 6v3M16 15v3"/><rect x="5.5" y="7" width="5" height="8"/><rect x="13.5" y="9" width="5" height="6"/><path d="M5.5 11h5"/>',
   'ct-bars': '<path d="M8 4v16M5 8h3M8 16h3M16 6v12M13 15h3M16 9h3"/>',
   'ct-line': '<path d="M3 17l5-6 4 3 5-7 4 4"/>',
+  'ct-footprint': '<path d="M5 4v16M5 8h2M5 15h2"/><rect x="9" y="5" width="5" height="3"/><rect x="14" y="5" width="5" height="3"/><rect x="9" y="10.5" width="5" height="3"/><rect x="14" y="10.5" width="5" height="3" fill="currentColor" fill-opacity=".35"/><rect x="9" y="16" width="5" height="3" fill="currentColor" fill-opacity=".35"/><rect x="14" y="16" width="5" height="3"/>',
   'ct-area': '<path d="M3 17l5-6 4 3 5-7 4 4v8H3z" fill="currentColor" fill-opacity=".25"/><path d="M3 17l5-6 4 3 5-7 4 4"/>',
   wallet: '<rect x="3" y="6" width="18" height="14" rx="2"/><path d="M3 10h18M16 15h2M6 6l9-3 1 3"/>',
   gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/>',

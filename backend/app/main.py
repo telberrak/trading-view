@@ -16,6 +16,7 @@ from . import contracts, news, watchlists
 from .details import details as symbol_details
 from .quotes import QuoteSession
 from .alerts import AlertEngine
+from .footprint import FootprintStream
 from .streams import TIMEFRAMES, ChartStream
 from .trading import Trading
 
@@ -110,25 +111,54 @@ async def search(q: str):
 
 @app.websocket("/ws")
 async def chart_ws(ws: WebSocket):
-    """One socket per chart. Client sends {"type":"subscribe","key":..,"tf":..}."""
+    """One socket per chart. Client sends {"type":"subscribe","key":..,"tf":..,"fp":bool}
+    and {"type":"footprint","on":bool} to switch order-flow data on or off for the current chart."""
     await ws.accept()
     queue: asyncio.Queue = asyncio.Queue()
     listeners.add(queue)
     stream: ChartStream | None = None
+    fp: FootprintStream | None = None
+    current = None  # (resolved contract, tf)
 
     async def sender():
         while True:
             await ws.send_json(await queue.get())
 
+    def stop_fp():
+        nonlocal fp
+        if fp:
+            fp.stop()
+            fp = None
+
+    async def start_fp():
+        nonlocal fp
+        stop_fp()
+        if current:
+            fp = FootprintStream(ib, queue, *current)
+            try:
+                await fp.start()
+            except Exception as e:  # noqa: BLE001
+                log.exception("footprint failed")
+                queue.put_nowait({"type": "notice", "message": f"Footprint: {e}"})
+
     send_task = asyncio.create_task(sender())
     try:
         while True:
             msg = await ws.receive_json()
+            if msg.get("type") == "footprint":
+                if msg.get("on"):
+                    if not fp:
+                        await start_fp()
+                else:
+                    stop_fp()
+                continue
             if msg.get("type") != "subscribe":
                 continue
             if stream:
                 stream.stop()
                 stream = None
+            stop_fp()
+            current = None
             key, tf = msg.get("key", "AAPL"), msg.get("tf", "1D")
             if tf not in TIMEFRAMES:
                 queue.put_nowait({"type": "notice", "message": f"Unknown timeframe {tf}"})
@@ -138,16 +168,21 @@ async def chart_ws(ws: WebSocket):
                 continue
             try:
                 r = await contracts.resolve(ib, key)
+                current = (r, tf)
                 stream = ChartStream(ib, queue, r, tf)
                 await stream.start()
             except Exception as e:  # noqa: BLE001
                 log.exception("subscribe failed")
                 queue.put_nowait({"type": "notice", "message": str(e)})
+                continue
+            if msg.get("fp"):
+                await start_fp()
     except WebSocketDisconnect:
         pass
     finally:
         if stream:
             stream.stop()
+        stop_fp()
         listeners.discard(queue)
         send_task.cancel()
 
