@@ -86,6 +86,22 @@ What comes from IBKR and what it means:
 - Every complete minute is saved in `backend/data/ticks.sqlite` (10 days kept), so history builds up
   while the app runs and later loads only fetch the gap.
 
+## Levels and volume profile
+
+From **Indicators**:
+- **Previous session O/H/L/C**: the last session's open, high, low and close (PO/PH/PL/PC), held flat
+  through the current session. A session starts after a gap of 45 minutes or more (overnight for stocks,
+  the daily break for futures) or on a new day; on daily charts it is the previous bar.
+- **Asia session High/Low**: high and low between two hours of your local time, 00:00 to 08:00 by default
+  (London time on your Mac). The lines follow the range while the window is open, then hold until the
+  next one. Change the hours in the indicator's settings.
+- **Volume Profile (session)**: one profile per session with POC, VAH and VAL. **Volume Profile (visible
+  range)** builds one profile from the bars on screen, on the right edge. Settings: number of rows and
+  value area % (70 by default). When order-flow data is on (footprint chart or a delta indicator) the
+  profile uses the exact traded volume at each price; otherwise each bar's volume is spread over its range.
+
+Every line in these (and the other indicators) has its own tick box and colour in the settings dialog.
+
 ## Bar replay
 
 Replay button > click the bar to start from. Then play/pause, step one bar (Shift+Right), pick a speed, choose a new start or exit.

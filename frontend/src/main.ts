@@ -18,6 +18,7 @@ import { type Bar } from './indicators';
 import type { ISeriesApi } from 'lightweight-charts';
 import { initStudies, orderFlow } from './studies';
 import { initFootprint } from './footprint';
+import { initProfiles } from './profile';
 import { initTrading } from './trading';
 import { initSideLayout } from './layout';
 import { loadColors, openChartSettings, withAlpha, type ChartColors } from './settings';
@@ -144,8 +145,9 @@ const shift = (t: number) => (INTRADAY.has(tf) ? t - new Date(t * 1000).getTimez
 const volBar = (b: Bar) => ({ time: b.time as UTCTimestamp, value: b.volume,
   color: withAlpha(b.close >= b.open ? colors.volUp : colors.volDown, 0.75) });
 
+let profiles: ReturnType<typeof initProfiles> | null = null;
 const studies = initStudies({ chart, getBars: () => bars, isIntraday: () => INTRADAY.has(tf), wrap: el('chart-wrap'),
-  onChange: () => { renderLegend(); syncFlow(); } });
+  onChange: () => { renderLegend(); syncFlow(); }, custom: (items) => profiles?.set(items) });
 function computeIndicators() { studies.compute(); }
 
 // ---------- footprint / order flow ----------
@@ -153,10 +155,12 @@ let fpRedrawPending = 0;
 const footprint = initFootprint({ chart, candles, getBars: () => bars, shift, barSeconds: () => TF_SEC[tf] ?? null,
   colors: () => ({ up: colors.up, down: colors.down, wickUp: colors.wickUp, wickDown: colors.wickDown, text: colors.text }),
   onData: () => { // order-flow indicators follow the data, at most a few times a second
+    profiles?.flowChanged();
     if (fpRedrawPending) return;
     fpRedrawPending = window.setTimeout(() => { fpRedrawPending = 0; if (studies.needsFlow()) { computeIndicators(); renderLegend(); } }, 250);
   } });
 orderFlow.bar = (t) => footprint.bar(t);
+profiles = initProfiles({ chart, candles, getBars: () => bars, flow: (t) => footprint.bar(t) });
 let flowOn = false;
 const wantFlow = () => INTRADAY.has(tf) && (chartType === 'footprint' || studies.needsFlow());
 /** Ask the server for order-flow data only while the footprint or a delta indicator is showing. */

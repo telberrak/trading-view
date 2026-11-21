@@ -135,3 +135,59 @@ export function stochastic(bars: Bar[], n: number, smoothK: number, smoothD: num
   const k = smaArr(raw, smoothK);
   return { k, d: smaArr(k, smoothD) };
 }
+
+/**
+ * Session boundaries, the same rule VWAP uses: a new session starts after a gap of 45 minutes or more
+ * (overnight for stocks, the daily break for futures), or on a new day if the last start was over 20 h ago.
+ * On daily and longer charts every bar is its own session.
+ */
+export function sessionStarts(bars: Bar[]): boolean[] {
+  const out: boolean[] = [];
+  let lastReset = -Infinity;
+  for (let i = 0; i < bars.length; i++) {
+    const prev = bars[i - 1];
+    const gap = prev ? bars[i].time - prev.time : Infinity;
+    const newDay = prev ? Math.floor(bars[i].time / 86400) !== Math.floor(prev.time / 86400) : true;
+    const start = gap >= 45 * 60 || (newDay && bars[i].time - lastReset > 20 * 3600);
+    if (start) lastReset = bars[i].time;
+    out.push(start);
+  }
+  return out;
+}
+
+/** Previous session's open, high, low and close, held flat through the current session. */
+export function prevSession(bars: Bar[]) {
+  const st = sessionStarts(bars);
+  const o: number[] = [], h: number[] = [], l: number[] = [], c: number[] = [];
+  type S = { o: number; h: number; l: number; c: number };
+  let cur: S | null = null;
+  let prev: S | null = null;
+  for (let i = 0; i < bars.length; i++) {
+    const b = bars[i];
+    if (st[i]) { prev = cur; cur = { o: b.open, h: b.high, l: b.low, c: b.close }; }
+    else if (cur) { cur.h = Math.max(cur.h, b.high); cur.l = Math.min(cur.l, b.low); cur.c = b.close; }
+    o.push(prev ? prev.o : NaN); h.push(prev ? prev.h : NaN); l.push(prev ? prev.l : NaN); c.push(prev ? prev.c : NaN);
+  }
+  return { o, h, l, c };
+}
+
+/**
+ * High and low of a time window each day (chart time = your local time), e.g. the Asia session.
+ * During the window the lines follow the developing range; afterwards they hold until the next window.
+ */
+export function windowRange(bars: Bar[], startH: number, endH: number) {
+  const hi: number[] = [], lo: number[] = [], starts: boolean[] = [];
+  const inWin = (t: number) => {
+    const h = (((t % 86400) + 86400) % 86400) / 3600;
+    return startH <= endH ? h >= startH && h < endH : h >= startH || h < endH;
+  };
+  let H = NaN, L = NaN, was = false;
+  for (const b of bars) {
+    const now = inWin(b.time);
+    if (now && !was) { H = b.high; L = b.low; } else if (now) { H = Math.max(H, b.high); L = Math.min(L, b.low); }
+    starts.push(now && !was);
+    was = now;
+    hi.push(H); lo.push(L);
+  }
+  return { hi, lo, starts };
+}

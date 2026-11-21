@@ -1,25 +1,31 @@
-import { HistogramSeries, LineSeries, LineStyle, type IChartApi, type ISeriesApi, type UTCTimestamp } from 'lightweight-charts';
+import { HistogramSeries, LineSeries, LineStyle, LineType, type IChartApi, type ISeriesApi, type UTCTimestamp } from 'lightweight-charts';
 import { compact } from './footprint';
 import { icon } from './icons';
-import { atr, bollinger, emaArr, macd, rsi, smaArr, stochastic, vwap, type Bar } from './indicators';
+import { atr, bollinger, emaArr, macd, prevSession, rsi, sessionStarts, smaArr, stochastic, vwap, windowRange, type Bar } from './indicators';
 
 /**
  * Indicators ("studies"). Overlays draw on the price pane; oscillators get their own pane below it,
  * the way TradingView stacks them. Settings persist in localStorage.
  */
-export type Kind = 'ema' | 'sma' | 'vwap' | 'bb' | 'rsi' | 'macd' | 'stoch' | 'atr' | 'delta' | 'cvd';
+export type Kind = 'ema' | 'sma' | 'vwap' | 'bb' | 'rsi' | 'macd' | 'stoch' | 'atr' | 'delta' | 'cvd' | 'prev' | 'asia' | 'vps' | 'vpvr';
 
 /** Order-flow numbers per bar, supplied by the footprint module (undefined where IBKR gave no trades). */
 export const orderFlow: { bar: (t: number) => { delta: number } | undefined } = { bar: () => undefined };
 const FLOW_KINDS = new Set<Kind>(['delta', 'cvd']);
-export interface StudyCfg { id: string; kind: Kind; params: number[]; color: string; on: boolean; colors?: Record<string, string>; width?: number }
+export interface StudyCfg {
+  id: string; kind: Kind; params: number[]; color: string; on: boolean;
+  colors?: Record<string, string>; width?: number;
+  hidden?: string[]; // outputs (lines) switched off in settings
+}
+/** Studies drawn by their own renderer rather than as line series (volume profiles). */
+export interface CustomItem { cfg: StudyCfg; outs: { name: string; color: string; on: boolean }[] }
 
 /** Apply the user's colour choices (per output line) on top of the defaults. */
 function styled(c: StudyCfg, outs: Output[]): Output[] {
   return outs.map((o) => (o.hist || !c.colors?.[o.name] ? o : { ...o, color: c.colors[o.name] }));
 }
 
-interface Output { name: string; color: string; values: number[]; hist?: boolean; colors?: string[]; dashed?: boolean }
+interface Output { off?: boolean; name: string; color: string; values: number[]; hist?: boolean; colors?: string[]; dashed?: boolean; title?: string; step?: boolean; breaks?: boolean[] }
 interface Def {
   title: string;
   pane: boolean;
@@ -28,12 +34,13 @@ interface Def {
   levels?: number[];
   label: (p: number[]) => string;
   format?: (v: number) => string;
+  custom?: boolean; // drawn by a renderer outside this module
   calc: (bars: Bar[], p: number[], color: string) => Output[];
 }
 
 const UP = '#22ab94', DOWN = '#f23645';
 const compactFmt = (v: number) => compact(Math.round(v * 100) / 100);
-export const DEFS: Record<Kind, Def> = {
+const BASE_DEFS: Partial<Record<Kind, Def>> = {
   ema: { title: 'Moving Average Exponential', pane: false, params: [['Length', 9]], label: (p) => `EMA ${p[0]}`,
     calc: (b, p, c) => [{ name: 'EMA', color: c, values: emaArr(b.map((x) => x.close), p[0]) }] },
   sma: { title: 'Moving Average', pane: false, params: [['Length', 50]], label: (p) => `SMA ${p[0]}`,
@@ -80,7 +87,32 @@ export const DEFS: Record<Kind, Def> = {
     return [{ name: 'CVD', color: c, values }];
   } },
 };
-const ADD_ORDER: Kind[] = ['ema', 'sma', 'bb', 'vwap', 'rsi', 'macd', 'stoch', 'atr', 'delta', 'cvd'];
+export const DEFS = BASE_DEFS as Record<Kind, Def>;
+const isHour = (name: string) => /hour/i.test(name);
+const VP_OUTS = (c: string): Output[] => [
+  { name: 'Profile', color: '#5d6b8a', values: [] }, { name: 'Value area', color: c, values: [] },
+  { name: 'POC', color: '#ffd54f', values: [] }, { name: 'VAH', color: '#26c6da', values: [] }, { name: 'VAL', color: '#ef6c9c', values: [] }];
+Object.assign(DEFS, {
+  prev: { title: 'Previous session O/H/L/C', pane: false, params: [], label: () => 'Prev session', calc: (b: Bar[]) => {
+    const r = prevSession(b);
+    const breaks = sessionStarts(b);
+    return [{ name: 'Open', title: 'PO', color: '#9e9e9e', values: r.o, step: true, dashed: true, breaks },
+      { name: 'High', title: 'PH', color: '#4caf50', values: r.h, step: true, dashed: true, breaks },
+      { name: 'Low', title: 'PL', color: '#f44336', values: r.l, step: true, dashed: true, breaks },
+      { name: 'Close', title: 'PC', color: '#ffb74d', values: r.c, step: true, dashed: true, breaks }];
+  } },
+  asia: { title: 'Asia session High/Low', pane: false, intradayOnly: true, params: [['Start hour (your time)', 0], ['End hour (your time)', 8]],
+    label: (p: number[]) => `Asia ${p[0]}-${p[1]}`, calc: (b: Bar[], p: number[]) => {
+      const r = windowRange(b, p[0], p[1]);
+      return [{ name: 'Asia High', title: 'Asia H', color: '#00bcd4', values: r.hi, step: true, breaks: r.starts },
+        { name: 'Asia Low', title: 'Asia L', color: '#ff9800', values: r.lo, step: true, breaks: r.starts }];
+    } },
+  vps: { title: 'Volume Profile (session)', pane: false, custom: true, params: [['Rows', 24], ['Value area %', 70]],
+    label: (p: number[]) => `VP session ${p[0]} ${p[1]}%`, calc: (_b: Bar[], _p: number[], c: string) => VP_OUTS(c) },
+  vpvr: { title: 'Volume Profile (visible range)', pane: false, custom: true, params: [['Rows', 24], ['Value area %', 70]],
+    label: (p: number[]) => `VPVR ${p[0]} ${p[1]}%`, calc: (_b: Bar[], _p: number[], c: string) => VP_OUTS(c) },
+} as Partial<Record<Kind, Def>>);
+const ADD_ORDER: Kind[] = ['ema', 'sma', 'bb', 'vwap', 'prev', 'asia', 'vps', 'vpvr', 'rsi', 'macd', 'stoch', 'atr', 'delta', 'cvd'];
 const PALETTE = ['#2962ff', '#ff9800', '#e040fb', '#26c6da', '#ffeb3b', '#ef5350', '#66bb6a', '#ab47bc', '#7e57c2'];
 void DOWN;
 
@@ -103,9 +135,9 @@ function loadCfg(): StudyCfg[] {
 
 const fmt = (v: number) => (Math.abs(v) >= 0.1 || v === 0 ? v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : v.toPrecision(4));
 
-interface Ctx { chart: IChartApi; getBars: () => Bar[]; isIntraday: () => boolean; wrap: HTMLElement; onChange: () => void }
+interface Ctx { chart: IChartApi; getBars: () => Bar[]; isIntraday: () => boolean; wrap: HTMLElement; onChange: () => void; custom: (items: CustomItem[]) => void }
 
-export function initStudies({ chart, getBars, isIntraday, wrap, onChange }: Ctx) {
+export function initStudies({ chart, getBars, isIntraday, wrap, onChange, custom }: Ctx) {
   const cfgs = loadCfg();
   const built = new Map<string, { series: ISeriesApi<'Line' | 'Histogram'>[]; out: Output[]; pane: number }>();
   let builtSig = '';
@@ -121,13 +153,15 @@ export function initStudies({ chart, getBars, isIntraday, wrap, onChange }: Ctx)
     let pane = 0;
     for (const c of visible()) {
       const def = DEFS[c.kind];
+      if (def.custom) { built.set(c.id, { series: [], out: [], pane: 0 }); continue; }
       const idx = def.pane ? ++pane : 0;
       const outs = styled(c, def.calc([], c.params, c.color));
       const series = outs.map((o, j) => {
         const s = o.hist
           ? chart.addSeries(HistogramSeries, { color: o.color, priceLineVisible: false, lastValueVisible: false }, idx)
           : chart.addSeries(LineSeries, { color: o.color, lineWidth: (c.width ?? 1) as 1 | 2 | 3 | 4, priceLineVisible: false, lastValueVisible: !def.pane || j > 0 || outs.length === 1,
-            crosshairMarkerVisible: false, lineStyle: o.dashed ? LineStyle.Dashed : LineStyle.Solid }, idx);
+            crosshairMarkerVisible: false, lineStyle: o.dashed ? LineStyle.Dashed : LineStyle.Solid,
+            lineType: o.step ? LineType.WithSteps : LineType.Simple, title: o.title ?? '' }, idx);
         return s;
       });
       const lvlHost = series.find((_, j) => !outs[j].hist) ?? series[0];
@@ -143,22 +177,31 @@ export function initStudies({ chart, getBars, isIntraday, wrap, onChange }: Ctx)
   function compute() {
     if (signature() !== builtSig) rebuild();
     const bars = getBars();
+    const items: CustomItem[] = [];
     for (const c of visible()) {
       const b = built.get(c.id);
       if (!b) continue;
-      b.out = styled(c, DEFS[c.kind].calc(bars, c.params, c.color));
+      if (DEFS[c.kind].custom) {
+        items.push({ cfg: c, outs: styled(c, DEFS[c.kind].calc([], c.params, c.color)).map((o) => ({ name: o.name, color: o.color, on: !c.hidden?.includes(o.name) })) });
+        continue;
+      }
+      b.out = styled(c, DEFS[c.kind].calc(bars, c.params, c.color)).map((o) => (c.hidden?.includes(o.name) ? { ...o, off: true } : o));
       b.out.forEach((o, j) => {
         const data = [];
         for (let i = 0; i < bars.length; i++) {
           if (Number.isNaN(o.values[i])) continue;
           const pt: { time: UTCTimestamp; value: number; color?: string } = { time: bars[i].time as UTCTimestamp, value: o.values[i] };
           if (o.colors) pt.color = o.colors[i];
+          else if (o.breaks?.[i]) pt.color = 'rgba(0,0,0,0)'; // hide the joint where a new level starts
+          else if (o.breaks) pt.color = o.color;
           data.push(pt);
         }
         if (!o.hist) b.series[j].applyOptions({ color: o.color, lineWidth: (c.width ?? 1) as 1 | 2 | 3 | 4 });
+        b.series[j].applyOptions({ visible: !o.off });
         b.series[j].setData(data);
       });
     }
+    custom(items);
   }
 
   function indexAt(time?: number) {
@@ -169,7 +212,7 @@ export function initStudies({ chart, getBars, isIntraday, wrap, onChange }: Ctx)
     while (lo < hi) { const m = (lo + hi + 1) >> 1; if (bars[m].time <= time) lo = m; else hi = m - 1; }
     return lo;
   }
-  const valuesHtml = (b: { out: Output[] }, i: number, f: (v: number) => string = fmt) => b.out
+  const valuesHtml = (b: { out: Output[] }, i: number, f: (v: number) => string = fmt) => b.out.filter((o) => !o.off)
     .map((o) => `<span style="color:${o.hist ? (o.colors?.[i] ?? o.color) : o.color}">${i >= 0 && !Number.isNaN(o.values[i]) ? f(o.values[i]) : '–'}</span>`).join(' ');
 
   /** Legend line for overlays, shown under the OHLC row. */
@@ -210,7 +253,7 @@ export function initStudies({ chart, getBars, isIntraday, wrap, onChange }: Ctx)
     dlg.className = 'study-dlg';
     dlg.innerHTML = `<form method="dialog"><h3></h3>
       ${def.params.map(([n], i) => `<label>${n}<input type="number" step="any" min="0" data-p="${i}" value="${c.params[i]}" /></label>`).join('')}
-      <div class="sd-colors">${outs.map((o) => `<label class="sd-color"><input type="color" data-o="${o.name}" value="${o.color}" /><span>${o.name}</span></label>`).join('')}</div>
+      <div class="sd-colors">${outs.map((o) => `<label class="sd-color">${outs.length > 1 ? `<input type="checkbox" data-v="${o.name}" ${c.hidden?.includes(o.name) ? '' : 'checked'} title="Show this line" />` : ''}<input type="color" data-o="${o.name}" value="${o.color}" /><span>${o.name}</span></label>`).join('')}</div>
       <label>Line width <select data-w>${[1, 2, 3, 4].map((w) => `<option ${w === (c.width ?? 1) ? 'selected' : ''}>${w}</option>`).join('')}</select></label>
       <div class="dlg-btns"><button type="button" data-reset>Defaults</button><span class="spacer"></span><button value="cancel">Cancel</button><button value="ok" class="primary">OK</button></div></form>`;
     dlg.querySelector('h3')!.textContent = def.title;
@@ -220,11 +263,14 @@ export function initStudies({ chart, getBars, isIntraday, wrap, onChange }: Ctx)
       const base = def.calc([], def.params.map((p) => p[1]), c.color).filter((o) => !o.hist);
       base.forEach((o) => (dlg.querySelector<HTMLInputElement>(`[data-o="${o.name}"]`)!.value = o.color));
       dlg.querySelector<HTMLSelectElement>('[data-w]')!.value = '1';
+      dlg.querySelectorAll<HTMLInputElement>('[data-v]').forEach((x) => (x.checked = true));
     };
     dlg.addEventListener('close', () => {
       if (dlg.returnValue === 'ok') {
         const v = def.params.map((_, i) => Number(dlg.querySelector<HTMLInputElement>(`[data-p="${i}"]`)!.value));
-        if (v.every((x) => x > 0)) c.params = v.map((x, i) => (def.params[i][0] === 'StdDev' ? x : Math.round(x)));
+        const ok = v.every((x, i) => Number.isFinite(x) && (isHour(def.params[i][0]) ? x >= 0 && x <= 24 : x > 0));
+        if (ok) c.params = v.map((x, i) => (def.params[i][0] === 'StdDev' || isHour(def.params[i][0]) ? x : Math.round(x)));
+        c.hidden = [...dlg.querySelectorAll<HTMLInputElement>('[data-v]')].filter((x) => !x.checked).map((x) => x.dataset.v!);
         const colors: Record<string, string> = {};
         dlg.querySelectorAll<HTMLInputElement>('[data-o]').forEach((inp) => (colors[inp.dataset.o!] = inp.value));
         c.colors = colors;
