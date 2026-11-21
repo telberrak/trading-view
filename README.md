@@ -89,9 +89,11 @@ What comes from IBKR and what it means:
 ## Levels and volume profile
 
 From **Indicators**:
-- **Previous session O/H/L/C**: the last session's open, high, low and close (PO/PH/PL/PC), held flat
-  through the current session. A session starts after a gap of 45 minutes or more (overnight for stocks,
-  the daily break for futures) or on a new day; on daily charts it is the previous bar.
+- **Previous session O/H/L/C**: the previous session's open, high, low and close (PDO/PDH/PDL/PDC), held
+  flat through the session. A session starts after a gap of 45 minutes or more (overnight for stocks,
+  the daily break for futures) or on a new day; on daily charts it is the previous bar. In its settings,
+  **Sessions to show** (default 1, the current session only) draws the levels for that many recent sessions,
+  each with its own previous session's levels, and **Show labels** puts the PDH/PDL/... text on each line.
 - **Asia session High/Low**: high and low between two hours of your local time, 00:00 to 08:00 by default
   (London time on your Mac). The lines follow the range while the window is open, then hold until the
   next one. Change the hours in the indicator's settings.

@@ -1,4 +1,4 @@
-import { HistogramSeries, LineSeries, LineStyle, LineType, type IChartApi, type ISeriesApi, type UTCTimestamp } from 'lightweight-charts';
+import { HistogramSeries, LineSeries, LineStyle, LineType, type IChartApi, type IPrimitivePaneRenderer, type ISeriesApi, type ISeriesPrimitive, type Time, type UTCTimestamp } from 'lightweight-charts';
 import { compact } from './footprint';
 import { icon } from './icons';
 import { askName, lib, updateLibrary } from './library';
@@ -26,7 +26,7 @@ function styled(c: StudyCfg, outs: Output[]): Output[] {
   return outs.map((o) => (o.hist || !c.colors?.[o.name] ? o : { ...o, color: c.colors[o.name] }));
 }
 
-interface Output { off?: boolean; name: string; color: string; values: number[]; hist?: boolean; colors?: string[]; dashed?: boolean; title?: string; step?: boolean; breaks?: boolean[] }
+interface Output { off?: boolean; name: string; color: string; values: number[]; hist?: boolean; colors?: string[]; dashed?: boolean; title?: string; step?: boolean; breaks?: boolean[]; tags?: { i: number; text: string }[] }
 interface Def {
   title: string;
   pane: boolean;
@@ -90,18 +90,32 @@ const BASE_DEFS: Partial<Record<Kind, Def>> = {
 };
 export const DEFS = BASE_DEFS as Record<Kind, Def>;
 const isHour = (name: string) => /hour/i.test(name);
+/** Params named with a trailing '?' are on/off switches (1/0), shown as a checkbox. */
+const isFlag = (name: string) => name.endsWith('?');
 const VP_OUTS = (c: string): Output[] => [
   { name: 'Profile', color: '#5d6b8a', values: [] }, { name: 'Value area', color: c, values: [] },
   { name: 'POC', color: '#ffd54f', values: [] }, { name: 'VAH', color: '#26c6da', values: [] }, { name: 'VAL', color: '#ef6c9c', values: [] }];
 Object.assign(DEFS, {
-  prev: { title: 'Previous session O/H/L/C', pane: false, params: [], label: () => 'Prev session', calc: (b: Bar[]) => {
-    const r = prevSession(b);
-    const breaks = sessionStarts(b);
-    return [{ name: 'Open', title: 'PO', color: '#9e9e9e', values: r.o, step: true, dashed: true, breaks },
-      { name: 'High', title: 'PH', color: '#4caf50', values: r.h, step: true, dashed: true, breaks },
-      { name: 'Low', title: 'PL', color: '#f44336', values: r.l, step: true, dashed: true, breaks },
-      { name: 'Close', title: 'PC', color: '#ffb74d', values: r.c, step: true, dashed: true, breaks }];
-  } },
+  prev: { title: 'Previous session O/H/L/C', pane: false, params: [['Sessions to show', 1], ['Show labels?', 1]],
+    label: (p: number[]) => `Prev session${(p[0] ?? 1) > 1 ? ` x${p[0]}` : ''}`, calc: (b: Bar[], p: number[]) => {
+      const r = prevSession(b);
+      const breaks = sessionStarts(b);
+      // only the last N sessions carry their previous-session levels (N = 1: today's session only)
+      const starts: number[] = [];
+      breaks.forEach((x, i) => { if (x) starts.push(i); });
+      const n = Math.max(1, Math.round(p[0] ?? 1));
+      const from = starts.length ? starts[Math.max(0, starts.length - n)] : 0;
+      const ends = starts.filter((i) => i > from).map((i) => i - 1).concat(b.length ? [b.length - 1] : []);
+      const keep = (v: number[]) => v.map((x, i) => (i < from ? NaN : x));
+      const labels = (p[1] ?? 1) > 0;
+      const line = (name: string, title: string, color: string, v: number[]) => {
+        const values = keep(v);
+        return { name, title, color, values, step: true, dashed: true, breaks,
+          tags: labels ? ends.filter((i) => !Number.isNaN(values[i])).map((i) => ({ i, text: title })) : undefined };
+      };
+      return [line('Open', 'PDO', '#9e9e9e', r.o), line('High', 'PDH', '#4caf50', r.h),
+        line('Low', 'PDL', '#f44336', r.l), line('Close', 'PDC', '#ffb74d', r.c)];
+    } },
   asia: { title: 'Asia session High/Low', pane: false, intradayOnly: true, params: [['Start hour (your time)', 0], ['End hour (your time)', 8]],
     label: (p: number[]) => `Asia ${p[0]}-${p[1]}`, calc: (b: Bar[], p: number[]) => {
       const r = windowRange(b, p[0], p[1]);
@@ -140,6 +154,8 @@ interface Ctx { chart: IChartApi; getBars: () => Bar[]; isIntraday: () => boolea
 
 export function initStudies({ chart, getBars, isIntraday, wrap, onChange, custom, storeKey = 'studies' }: Ctx) {
   const cfgs = loadCfg(storeKey);
+  // settings saved before a study gained a parameter get its default
+  for (const c of cfgs) DEFS[c.kind]?.params.forEach(([, d], i) => { if (c.params[i] === undefined) c.params[i] = d; });
   const built = new Map<string, { series: ISeriesApi<'Line' | 'Histogram'>[]; out: Output[]; pane: number }>();
   let builtSig = '';
   const legends: HTMLDivElement[] = [];
@@ -163,6 +179,7 @@ export function initStudies({ chart, getBars, isIntraday, wrap, onChange, custom
           : chart.addSeries(LineSeries, { color: o.color, lineWidth: (c.width ?? 1) as 1 | 2 | 3 | 4, priceLineVisible: false, lastValueVisible: !def.pane || j > 0 || outs.length === 1,
             crosshairMarkerVisible: false, lineStyle: o.dashed ? LineStyle.Dashed : LineStyle.Solid,
             lineType: o.step ? LineType.WithSteps : LineType.Simple, title: o.title ?? '' }, idx);
+        if (!o.hist) (s as ISeriesApi<'Line'>).attachPrimitive(tagLabels(chart, s, () => built.get(c.id)?.out[j]));
         return s;
       });
       const lvlHost = series.find((_, j) => !outs[j].hist) ?? series[0];
@@ -253,14 +270,19 @@ export function initStudies({ chart, getBars, isIntraday, wrap, onChange, custom
     const dlg = document.createElement('dialog');
     dlg.className = 'study-dlg';
     dlg.innerHTML = `<form method="dialog"><h3></h3>
-      ${def.params.map(([n], i) => `<label>${n}<input type="number" step="any" min="0" data-p="${i}" value="${c.params[i]}" /></label>`).join('')}
+      ${def.params.map(([n], i) => (isFlag(n)
+        ? `<label class="sd-flag"><input type="checkbox" data-p="${i}" ${c.params[i] ? 'checked' : ''} /> ${n.slice(0, -1)}</label>`
+        : `<label>${n}<input type="number" step="any" min="0" data-p="${i}" value="${c.params[i]}" /></label>`)).join('')}
       <div class="sd-colors">${outs.map((o) => `<label class="sd-color">${outs.length > 1 ? `<input type="checkbox" data-v="${o.name}" ${c.hidden?.includes(o.name) ? '' : 'checked'} title="Show this line" />` : ''}<input type="color" data-o="${o.name}" value="${o.color}" /><span>${o.name}</span></label>`).join('')}</div>
       <label>Line width <select data-w>${[1, 2, 3, 4].map((w) => `<option ${w === (c.width ?? 1) ? 'selected' : ''}>${w}</option>`).join('')}</select></label>
       <div class="dlg-btns"><button type="button" data-reset>Defaults</button><span class="spacer"></span><button value="cancel">Cancel</button><button value="ok" class="primary">OK</button></div></form>`;
     dlg.querySelector('h3')!.textContent = def.title;
     document.body.appendChild(dlg);
     dlg.querySelector<HTMLButtonElement>('[data-reset]')!.onclick = () => {
-      def.params.forEach(([, d], i) => (dlg.querySelector<HTMLInputElement>(`[data-p="${i}"]`)!.value = String(d)));
+      def.params.forEach(([n, d], i) => {
+        const inp = dlg.querySelector<HTMLInputElement>(`[data-p="${i}"]`)!;
+        if (isFlag(n)) inp.checked = !!d; else inp.value = String(d);
+      });
       const base = def.calc([], def.params.map((p) => p[1]), c.color).filter((o) => !o.hist);
       base.forEach((o) => (dlg.querySelector<HTMLInputElement>(`[data-o="${o.name}"]`)!.value = o.color));
       dlg.querySelector<HTMLSelectElement>('[data-w]')!.value = '1';
@@ -268,8 +290,11 @@ export function initStudies({ chart, getBars, isIntraday, wrap, onChange, custom
     };
     dlg.addEventListener('close', () => {
       if (dlg.returnValue === 'ok') {
-        const v = def.params.map((_, i) => Number(dlg.querySelector<HTMLInputElement>(`[data-p="${i}"]`)!.value));
-        const ok = v.every((x, i) => Number.isFinite(x) && (isHour(def.params[i][0]) ? x >= 0 && x <= 24 : x > 0));
+        const v = def.params.map(([n], i) => {
+          const inp = dlg.querySelector<HTMLInputElement>(`[data-p="${i}"]`)!;
+          return isFlag(n) ? (inp.checked ? 1 : 0) : Number(inp.value);
+        });
+        const ok = v.every((x, i) => Number.isFinite(x) && (isFlag(def.params[i][0]) || (isHour(def.params[i][0]) ? x >= 0 && x <= 24 : x > 0)));
         if (ok) c.params = v.map((x, i) => (def.params[i][0] === 'StdDev' || isHour(def.params[i][0]) ? x : Math.round(x)));
         c.hidden = [...dlg.querySelectorAll<HTMLInputElement>('[data-v]')].filter((x) => !x.checked).map((x) => x.dataset.v!);
         const colors: Record<string, string> = {};
@@ -361,4 +386,26 @@ export function initStudies({ chart, getBars, isIntraday, wrap, onChange, custom
   /** True when a visible indicator needs order-flow (footprint) data. */
   const needsFlow = () => visible().some((c) => FLOW_KINDS.has(c.kind));
   return { compute, overlayLegend, paneLegends, renderMenu, needsFlow, setAll };
+}
+
+/** Text labels on a line (e.g. "PDH"), sitting just above the line at the end of each segment. */
+function tagLabels(chart: IChartApi, series: ISeriesApi<'Line' | 'Histogram'>, out: () => Output | undefined): ISeriesPrimitive<Time> {
+  const renderer: IPrimitivePaneRenderer = {
+    draw: (target) => target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
+      const o = out();
+      if (!o?.tags?.length || o.off) return;
+      ctx.save();
+      ctx.font = '11px -apple-system, "Segoe UI", Roboto, sans-serif';
+      ctx.fillStyle = o.color;
+      for (const t of o.tags) {
+        const x = chart.timeScale().logicalToCoordinate(t.i as never);
+        const y = series.priceToCoordinate(o.values[t.i]);
+        if (x === null || y === null || x < -40 || x > mediaSize.width + 80) continue;
+        ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
+        ctx.fillText(t.text, x, y - 2);
+      }
+      ctx.restore();
+    }),
+  };
+  return { paneViews: () => [{ renderer: () => renderer, zOrder: () => 'top' }], updateAllViews: () => {} };
 }
