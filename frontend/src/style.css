@@ -329,3 +329,27 @@ dialog input[type=color]::-webkit-color-swatch { border: 0; border-radius: 2px; 
 #draw-edit button { padding: 3px 7px; border-radius: 4px; color: var(--text); display: inline-flex; align-items: center; }
 #draw-edit button:hover { background: var(--hover); }
 #draw-edit button[hidden] { display: none; }
+
+/* screener drawer */
+#screener { position: relative; flex: none; display: flex; flex-direction: column; border-top: 4px solid #121212; background: #0b0b0b; min-height: 140px; }
+#screener.hidden { display: none; }
+#screener .sc-resize { position: absolute; top: -5px; left: 0; right: 0; height: 6px; cursor: ns-resize; z-index: 2; }
+#screener .sc-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid #1f1f1f; font-size: 12px; }
+#screener select, #screener input[type=number] { background: #161616; color: var(--text); border: 1px solid #2a2a2a; border-radius: 4px; padding: 4px 6px; font-size: 12px; }
+#screener input[type=number] { width: 70px; }
+#screener .sc-f { display: flex; align-items: center; gap: 4px; color: var(--muted); }
+#screener .sc-auto { display: flex; align-items: center; gap: 4px; color: var(--muted); }
+#screener .sc-run { padding: 4px 14px; border-radius: 4px; background: #2962ff; color: #fff; }
+#screener .sc-msg { color: var(--muted); margin-left: auto; }
+#screener .sc-table { flex: 1; overflow: auto; }
+#screener table { width: 100%; border-collapse: collapse; font-size: 12px; }
+#screener th { position: sticky; top: 0; background: #0b0b0b; color: var(--muted); font-weight: 500; text-align: left; padding: 6px 10px; cursor: pointer; border-bottom: 1px solid #1f1f1f; white-space: nowrap; }
+#screener th.sorted { color: var(--text); }
+#screener td { padding: 5px 10px; border-bottom: 1px solid #141414; white-space: nowrap; }
+#screener .n { text-align: right; font-variant-numeric: tabular-nums; }
+#screener td.sym { display: flex; align-items: center; gap: 6px; font-weight: 600; }
+#screener td.nm { color: var(--muted); max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+#screener tr:hover td { background: #161616; cursor: pointer; }
+#screener tr.sel td { background: #1c2333; }
+#screener .up { color: var(--green, #22ab94); }
+#screener .down { color: var(--red, #f23645); }

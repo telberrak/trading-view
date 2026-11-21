@@ -123,6 +123,18 @@ a tick-by-tick slot, so four footprint charts may hit your IBKR limits.
 
 All of these are saved in `backend/data/library.json`, so they survive browser resets.
 
+## Screener
+
+The funnel button on the right rail opens the screener under the charts. It runs IBKR's market scanner
+(the same scans as TWS's Market Scanner): top % gainers/losers, most active, unusual volume, gap
+up/down, near 52- or 13-week high/low, most trades, halted, and more, on US major, NASDAQ, NYSE, LSE
+or Europe. Filters: price, % change, volume, average volume and market cap. Up to 50 results; click a
+column to sort, click a row to chart it in the active chart, tick *every 60s* to refresh.
+
+Compared with TradingView's screener: IBKR ranks by one scan at a time and returns at most 50 rows, and
+there are no technical filters (RSI, moving averages…) or most fundamental columns. Quotes in the table
+are one snapshot per scan (delayed if you have no real-time subscription).
+
 ## Bar replay
 
 Replay button > click the bar to start from. Then play/pause, step one bar (Shift+Right), pick a speed, choose a new start or exit.

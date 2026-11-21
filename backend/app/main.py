@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from ib_async import IB
 
-from . import contracts, library, news, watchlists
+from . import contracts, library, news, scanner, watchlists
 from .details import details as symbol_details
 from .quotes import QuoteSession
 from .alerts import AlertEngine
@@ -283,6 +283,22 @@ async def events_ws(ws: WebSocket):
         pass
     finally:
         event_queues.discard(q)
+
+
+@app.get("/api/scanner")
+async def scanner_options():
+    return scanner.options()
+
+
+@app.post("/api/scanner")
+async def run_scanner(body: dict = Body(...)):
+    if not ib.isConnected():
+        return JSONResponse({"error": "Not connected to IBKR"}, status_code=503)
+    try:
+        return await scanner.run(ib, body)
+    except Exception as e:  # noqa: BLE001
+        log.warning("scanner failed: %s", e)
+        return JSONResponse({"error": str(e) or "IBKR scanner timed out"}, status_code=400)
 
 
 @app.get("/api/library")

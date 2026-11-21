@@ -25,6 +25,7 @@ import { loadColors, openChartSettings, withAlpha, type ChartColors } from './se
 import { attachSearch, shortName } from './search';
 import { initWatchlist, type Details } from './watchlist';
 import { initMultiChart } from './multichart';
+import { initScreener } from './screener';
 import { askName, lib, loadLibrary, onLibrary, updateLibrary } from './library';
 import { CHART_ID, EMBED, PREFIX, listen, post, syncOpts } from './sync';
 import './style.css';
@@ -511,6 +512,14 @@ const multi = EMBED ? null : initMultiChart(() => { sideLayout?.layout(); chart.
 const alerts = EMBED ? null : initAlerts({ getKey: () => key, getLast: () => allBars[allBars.length - 1]?.close ?? null, candles, onPick: pick });
 const trading = EMBED ? null : initTrading({ getKey: () => key, getLast: () => allBars[allBars.length - 1]?.close ?? null, candles, onPick: pick });
 attachSearch(el<HTMLInputElement>('symbol'), el<HTMLUListElement>('results'), (k) => choose(k));
+const screener = EMBED ? null : initScreener(pick, () => chart.timeScale().applyOptions({}));
+if (!EMBED) {
+  const btn = el('rail-sc'), box = el('screener');
+  let on = load('showScreener', false);
+  const apply = () => { btn.classList.toggle('active', on); box.classList.toggle('hidden', !on); if (on) screener?.shown(); };
+  apply();
+  btn.onclick = () => { on = !on; save('showScreener', on); apply(); };
+}
 const watchlist = EMBED ? null : initWatchlist(pick, (d) => { if (d.key === key) { details = d; renderLegend(); } });
 watchlist?.setActive(key);
 // TradingView habit: start typing anywhere to search
